@@ -1,0 +1,25 @@
+# .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+windows/publish/
+windows-installer/dist-installer/
+dist-installer/
+publish/
+release-artifacts/
+
+# Android / Gradle
+.gradle/
+android/.gradle/
+android/app/build/
+android/local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Scratch / temporary test files
+scratch/

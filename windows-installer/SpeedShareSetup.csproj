@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SpeedShare-Setup</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\windows\publish\SpeedShareWindows.exe" LogicalName="Payload.SpeedShareWindows.exe" />
+    <EmbeddedResource Include="..\windows\publish\SpeedShareWindows.dll" LogicalName="Payload.SpeedShareWindows.dll" />
+    <EmbeddedResource Include="..\windows\publish\SpeedShareWindows.runtimeconfig.json" LogicalName="Payload.SpeedShareWindows.runtimeconfig.json" />
+    <EmbeddedResource Include="..\windows\publish\SpeedShareWindows.deps.json" LogicalName="Payload.SpeedShareWindows.deps.json" />
+  </ItemGroup>
+
+</Project>
