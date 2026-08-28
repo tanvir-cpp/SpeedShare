@@ -1,31 +1,53 @@
 package com.example.speedshareandroid.theme
 
+import android.app.Activity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AccentCyan,
-    onPrimary = TextPrimary,
-    primaryContainer = DeepNavy,
-    onPrimaryContainer = AccentSky,
-    secondary = AccentSky,
-    onSecondary = TextPrimary,
-    background = BgDark,
+    primary = NeonIndigo,
+    secondary = NeonCyan,
+    tertiary = NeonMint,
+    background = BgMidnight,
+    surface = BgCard,
+    onPrimary = TextPureWhite,
+    onSecondary = TextPureWhite,
+    onTertiary = TextPureWhite,
     onBackground = TextPrimary,
-    surface = CardDark,
     onSurface = TextPrimary,
-    surfaceVariant = CardDarkHover,
+    surfaceVariant = BgCardElevated,
     onSurfaceVariant = TextSecondary,
-    outline = BorderDark
+    outline = BorderGlass
 )
 
 @Composable
 fun SpeedShareAndroidTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val colorScheme = DarkColorScheme
+    val view = LocalView.current
+
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = BgMidnight.toArgb()
+            window.navigationBarColor = BgMidnight.toArgb()
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
+        }
+    }
+
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = colorScheme,
         typography = Typography,
         content = content
     )

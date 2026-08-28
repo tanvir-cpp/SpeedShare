@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -33,6 +34,8 @@ import com.example.speedshareandroid.R
 import com.example.speedshareandroid.models.DiscoveredPeer
 import com.example.speedshareandroid.models.FileItem
 import com.example.speedshareandroid.theme.*
+import com.example.speedshareandroid.ui.components.QuickCategoryDeck
+import com.example.speedshareandroid.ui.components.RadarHero
 import com.example.speedshareandroid.ui.screens.HistoryScreen
 import com.example.speedshareandroid.ui.screens.SettingsScreen
 
@@ -50,6 +53,8 @@ fun SpeedShareScreen(
     val isTransferring by viewModel.isTransferring.collectAsState()
     val transferProgress by viewModel.transferProgress.collectAsState()
     val statusDialog by viewModel.transferStatusDialog.collectAsState()
+
+    var activePickerMime by remember { mutableStateOf("*/*") }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -78,24 +83,24 @@ fun SpeedShareScreen(
                                     text = "Speed",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.sp,
-                                    color = TextPrimary
+                                    color = TextPureWhite
                                 )
                                 Text(
                                     text = "Share",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.sp,
-                                    color = AccentCyan
+                                    color = NeonCyan
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(DeepNavy)
+                                        .background(NeonIndigo.copy(alpha = 0.25f))
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
                                         text = "Wi-Fi 6",
-                                        color = AccentSky,
+                                        color = NeonMint,
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -104,29 +109,18 @@ fun SpeedShareScreen(
                             Text(
                                 text = "IP: ${viewModel.discoveryManager.getLocalIp()}",
                                 fontSize = 11.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    if (currentTab == AppTab.SHARE) {
-                        IconButton(onClick = { viewModel.refreshDiscovery() }) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Scan LAN",
-                                tint = AccentCyan
+                                color = TextMuted
                             )
                         }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BgDark
+                    containerColor = BgMidnight
                 )
             )
         },
         bottomBar = {
-            Column {
+            Column(modifier = Modifier.background(BgMidnight)) {
                 // Floating Send Action Deck on Share Tab
                 if (currentTab == AppTab.SHARE) {
                     AnimatedVisibility(
@@ -134,31 +128,35 @@ fun SpeedShareScreen(
                         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                     ) {
-                        Surface(
-                            color = CardDark,
-                            tonalElevation = 8.dp,
-                            shadowElevation = 12.dp,
-                            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
-                            modifier = Modifier.fillMaxWidth()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFF1E1B4B), Color(0xFF0F172A))
+                                    )
+                                )
+                                .border(1.dp, NeonIndigo.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                .padding(14.dp, 12.dp)
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp, 12.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     val totalBytes = selectedFiles.sumOf { it.size }
                                     Text(
-                                        text = "${selectedFiles.size} ${if (selectedFiles.size == 1) "file" else "files"} ready",
-                                        color = TextPrimary,
+                                        text = "${selectedFiles.size} ${if (selectedFiles.size == 1) "file" else "files"} selected",
+                                        color = TextPureWhite,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
                                     Text(
                                         text = FileItem.formatBytes(totalBytes),
-                                        color = AccentSky,
+                                        color = NeonMint,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -168,7 +166,7 @@ fun SpeedShareScreen(
                                     onClick = { viewModel.sendFiles() },
                                     enabled = selectedPeer != null && !isTransferring,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = AccentCyan,
+                                        containerColor = NeonCyan,
                                         contentColor = Color.Black
                                     ),
                                     shape = RoundedCornerShape(12.dp),
@@ -177,11 +175,11 @@ fun SpeedShareScreen(
                                     Icon(
                                         imageVector = Icons.Default.Send,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (selectedPeer != null) "Send to ${selectedPeer?.deviceName?.take(10)}" else "Select Device",
+                                        text = if (selectedPeer != null) "Send to ${selectedPeer?.deviceName?.take(10)}" else "Choose Device",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
@@ -191,24 +189,25 @@ fun SpeedShareScreen(
                     }
                 }
 
-                // Material 3 Bottom Navigation Bar
+                // Sleek Material 3 Navigation Bar
                 NavigationBar(
-                    containerColor = CardDark,
-                    tonalElevation = 6.dp
+                    containerColor = BgCard,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.border(0.5.dp, BorderGlass, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                 ) {
                     NavigationBarItem(
                         selected = currentTab == AppTab.SHARE,
                         onClick = { viewModel.selectTab(AppTab.SHARE) },
                         icon = {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
+                            Icon(Icons.Default.Share, contentDescription = "Transfer")
                         },
-                        label = { Text("Transfer") },
+                        label = { Text("Transfer", fontWeight = if (currentTab == AppTab.SHARE) FontWeight.Bold else FontWeight.Normal) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.Black,
-                            selectedTextColor = AccentCyan,
+                            selectedTextColor = NeonCyan,
                             unselectedIconColor = TextMuted,
                             unselectedTextColor = TextMuted,
-                            indicatorColor = AccentCyan
+                            indicatorColor = NeonCyan
                         )
                     )
 
@@ -218,13 +217,13 @@ fun SpeedShareScreen(
                         icon = {
                             Icon(Icons.Default.List, contentDescription = "History")
                         },
-                        label = { Text("History") },
+                        label = { Text("History", fontWeight = if (currentTab == AppTab.HISTORY) FontWeight.Bold else FontWeight.Normal) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.Black,
-                            selectedTextColor = AccentCyan,
+                            selectedTextColor = NeonCyan,
                             unselectedIconColor = TextMuted,
                             unselectedTextColor = TextMuted,
-                            indicatorColor = AccentCyan
+                            indicatorColor = NeonCyan
                         )
                     )
 
@@ -234,19 +233,19 @@ fun SpeedShareScreen(
                         icon = {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         },
-                        label = { Text("Settings") },
+                        label = { Text("Settings", fontWeight = if (currentTab == AppTab.SETTINGS) FontWeight.Bold else FontWeight.Normal) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.Black,
-                            selectedTextColor = AccentCyan,
+                            selectedTextColor = NeonCyan,
                             unselectedIconColor = TextMuted,
                             unselectedTextColor = TextMuted,
-                            indicatorColor = AccentCyan
+                            indicatorColor = NeonCyan
                         )
                     )
                 }
             }
         },
-        containerColor = BgDark
+        containerColor = BgMidnight
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -256,11 +255,17 @@ fun SpeedShareScreen(
             when (currentTab) {
                 AppTab.SHARE -> {
                     ShareTabContent(
+                        localDeviceName = viewModel.customDeviceName.collectAsState().value,
+                        localIp = viewModel.discoveryManager.getLocalIp(),
                         peers = peers,
                         selectedPeer = selectedPeer,
                         selectedFiles = selectedFiles,
+                        onRefresh = { viewModel.refreshDiscovery() },
                         onSelectPeer = { p -> if (selectedPeer?.deviceId == p.deviceId) viewModel.clearSelectedPeer() else viewModel.selectPeer(p) },
-                        onAddFiles = { filePickerLauncher.launch(arrayOf("*/*")) },
+                        onPickCategory = { mime ->
+                            activePickerMime = mime
+                            filePickerLauncher.launch(if (mime == "*/*") arrayOf("*/*") else arrayOf(mime, "*/*"))
+                        },
                         onRemoveFile = { f -> viewModel.removeFile(f) },
                         onClearFiles = { viewModel.clearFiles() }
                     )
@@ -279,29 +284,29 @@ fun SpeedShareScreen(
     incomingRequest?.let { req ->
         AlertDialog(
             onDismissRequest = { viewModel.declineIncoming() },
-            containerColor = CardDark,
-            shape = RoundedCornerShape(20.dp),
+            containerColor = BgCard,
+            shape = RoundedCornerShape(22.dp),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
-                            .background(DeepNavy),
+                            .background(NeonIndigo.copy(alpha = 0.25f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
                             contentDescription = null,
-                            tint = AccentCyan,
-                            modifier = Modifier.size(20.dp)
+                            tint = NeonCyan,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Incoming Transfer",
-                        color = TextPrimary,
-                        fontSize = 17.sp,
+                        color = TextPureWhite,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -315,15 +320,15 @@ fun SpeedShareScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Total Size: ${FileItem.formatBytes(req.totalSize)}",
-                        color = AccentSky,
+                        text = "Total Payload: ${FileItem.formatBytes(req.totalSize)}",
+                        color = NeonMint,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = BgDark),
-                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = BgMidnight),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 140.dp)
@@ -332,7 +337,7 @@ fun SpeedShareScreen(
                             items(req.files) { f ->
                                 Text(
                                     text = "• ${f.name} (${f.formattedSize})",
-                                    color = TextPrimary,
+                                    color = TextPureWhite,
                                     fontSize = 12.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -345,7 +350,7 @@ fun SpeedShareScreen(
             confirmButton = {
                 Button(
                     onClick = { viewModel.acceptIncoming() },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonMint),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("Accept & Receive", color = Color.Black, fontWeight = FontWeight.Bold)
@@ -353,7 +358,7 @@ fun SpeedShareScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.declineIncoming() }) {
-                    Text("Decline", color = AccentRed)
+                    Text("Decline", color = NeonRose)
                 }
             }
         )
@@ -363,8 +368,8 @@ fun SpeedShareScreen(
     if (isTransferring) {
         AlertDialog(
             onDismissRequest = { /* prevent dismiss */ },
-            containerColor = CardDark,
-            shape = RoundedCornerShape(20.dp),
+            containerColor = BgCard,
+            shape = RoundedCornerShape(22.dp),
             title = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -372,8 +377,8 @@ fun SpeedShareScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "High-Speed Stream",
-                        color = TextPrimary,
+                        text = "Transferring Stream",
+                        color = TextPureWhite,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -381,12 +386,12 @@ fun SpeedShareScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(DeepNavy)
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .background(NeonIndigo.copy(alpha = 0.3f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "${p.formattedSpeed} • ${p.formattedBitrate}",
-                                color = AccentCyan,
+                                text = p.formattedSpeed,
+                                color = NeonCyan,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
@@ -399,15 +404,38 @@ fun SpeedShareScreen(
                     val progress = transferProgress
                     val percent = (progress?.percentage ?: 0f) / 100f
 
+                    // Large Speed Display
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            text = progress?.formattedSpeed ?: "0.0 MB/s",
+                            color = NeonCyan,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = progress?.formattedBitrate ?: "0 Mbps",
+                            color = TextMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 3.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     LinearProgressIndicator(
                         progress = { percent },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp)),
-                        color = AccentCyan,
-                        trackColor = BgDark,
+                        color = NeonCyan,
+                        trackColor = BgMidnight,
                     )
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
@@ -415,21 +443,22 @@ fun SpeedShareScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = if (progress != null) "${FileItem.formatBytes(progress.transferredBytes)} / ${FileItem.formatBytes(progress.totalBytes)}" else "Connecting...",
-                            color = TextPrimary,
+                            text = if (progress != null) "${FileItem.formatBytes(progress.transferredBytes)} / ${FileItem.formatBytes(progress.totalBytes)} (${progress.percentage.toInt()}%)" else "Connecting...",
+                            color = TextPureWhite,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp
                         )
                         Text(
                             text = progress?.formattedEta ?: "Calculating...",
-                            color = TextSecondary,
-                            fontSize = 12.sp
+                            color = NeonMint,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = progress?.currentFileName ?: "Preparing transfer stream...",
+                        text = progress?.currentFileName ?: "Preparing sockets...",
                         color = TextMuted,
                         fontSize = 11.sp,
                         maxLines = 1,
@@ -439,7 +468,7 @@ fun SpeedShareScreen(
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.cancelTransfer() }) {
-                    Text("Cancel Transfer", color = AccentRed)
+                    Text("Cancel Transfer", color = NeonRose)
                 }
             }
         )
@@ -449,19 +478,19 @@ fun SpeedShareScreen(
     statusDialog?.let { (success, message) ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissStatusDialog() },
-            containerColor = CardDark,
+            containerColor = BgCard,
             shape = RoundedCornerShape(20.dp),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = if (success) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (success) AccentGreen else AccentRed
+                        tint = if (success) NeonMint else NeonRose
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (success) "Transfer Completed" else "Transfer Notice",
-                        color = TextPrimary,
+                        color = TextPureWhite,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -469,7 +498,7 @@ fun SpeedShareScreen(
             },
             text = {
                 Text(
-                    text = message ?: (if (success) "Files saved to Downloads/SpeedShare and logged to History." else "Transfer ended."),
+                    text = message ?: (if (success) "Files processed successfully and recorded in History." else "Transfer ended."),
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
@@ -477,10 +506,10 @@ fun SpeedShareScreen(
             confirmButton = {
                 Button(
                     onClick = { viewModel.dismissStatusDialog() },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("OK", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("OK", color = TextPureWhite, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -489,11 +518,14 @@ fun SpeedShareScreen(
 
 @Composable
 fun ShareTabContent(
+    localDeviceName: String,
+    localIp: String,
     peers: List<DiscoveredPeer>,
     selectedPeer: DiscoveredPeer?,
     selectedFiles: List<FileItem>,
+    onRefresh: () -> Unit,
     onSelectPeer: (DiscoveredPeer) -> Unit,
-    onAddFiles: () -> Unit,
+    onPickCategory: (String) -> Unit,
     onRemoveFile: (FileItem) -> Unit,
     onClearFiles: () -> Unit
 ) {
@@ -503,49 +535,36 @@ fun ShareTabContent(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Section 1: Nearby Devices
+        // Hero: Animated Radar Scanner
         item {
-            Spacer(modifier = Modifier.height(4.dp))
+            RadarHero(
+                localDeviceName = localDeviceName,
+                localIp = localIp,
+                deviceCount = peers.size,
+                onRefresh = onRefresh
+            )
+        }
+
+        // Section 1: Discovered Devices
+        item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Nearby Devices",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(CardDarkHover)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "${peers.size}",
-                            color = AccentCyan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
+                Text(
+                    text = "DISCOVERED PEERS",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = TextMuted,
+                    letterSpacing = 1.sp
+                )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(AccentCyan)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
+                if (peers.isNotEmpty()) {
                     Text(
-                        text = "Scanning LAN",
-                        color = TextMuted,
-                        fontSize = 11.sp
+                        text = "Tap to select",
+                        fontSize = 11.sp,
+                        color = NeonCyan
                     )
                 }
             }
@@ -554,41 +573,26 @@ fun ShareTabContent(
         if (peers.isEmpty()) {
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = CardDark),
-                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = BgCard),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, BorderDark, RoundedCornerShape(14.dp))
+                        .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
+                            .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(CircleShape)
-                                .background(CardDarkHover),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = TextMuted,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Scanning local network...",
-                            color = TextPrimary,
+                            text = "Waiting for other devices...",
+                            color = TextPureWhite,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
                         Text(
-                            text = "Open SpeedShare on your Windows PC or another Android device connected to this Wi-Fi.",
+                            text = "Open SpeedShare on your Windows PC or another phone on the same Wi-Fi.",
                             color = TextSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
@@ -608,89 +612,57 @@ fun ShareTabContent(
             }
         }
 
-        // Section 2: Choose Files
+        // Section 2: Quick Pick Categories
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Files to Share",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = TextPrimary
-                )
-
-                if (selectedFiles.isNotEmpty()) {
-                    TextButton(onClick = onClearFiles) {
-                        Text(
-                            text = "Clear All",
-                            color = AccentRed,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CardDark),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable { onAddFiles() }
-                    .border(1.dp, BorderDark, RoundedCornerShape(14.dp))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PrimaryBlue),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color.White
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column {
-                        Text(
-                            text = "Add Files to Send",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = "Tap to choose videos, photos, APKs, or documents",
-                            color = TextSecondary,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // Selected Files List
-        items(selectedFiles) { file ->
-            FileItemRow(
-                file = file,
-                onRemove = { onRemoveFile(file) }
+            Text(
+                text = "SELECT FILES TO SHARE",
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = TextMuted,
+                letterSpacing = 1.sp
             )
         }
 
         item {
-            Spacer(modifier = Modifier.height(90.dp))
+            QuickCategoryDeck(onPickCategory = onPickCategory)
+        }
+
+        // Section 3: Selected Files Queue
+        if (selectedFiles.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "QUEUE (${selectedFiles.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = TextMuted,
+                        letterSpacing = 1.sp
+                    )
+
+                    TextButton(onClick = onClearFiles) {
+                        Text(
+                            text = "Clear All",
+                            color = NeonRose,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            items(selectedFiles) { file ->
+                FileItemRow(
+                    file = file,
+                    onRemove = { onRemoveFile(file) }
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
@@ -703,17 +675,17 @@ fun DeviceCard(
 ) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) DeepNavy else CardDark
+            containerColor = if (isSelected) Color(0xFF1E1B4B) else BgCard
         ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .border(
-                1.dp,
-                if (isSelected) AccentCyan else BorderDark,
-                RoundedCornerShape(14.dp)
+                1.5.dp,
+                if (isSelected) NeonCyan else BorderGlass,
+                RoundedCornerShape(16.dp)
             )
     ) {
         Row(
@@ -724,16 +696,18 @@ fun DeviceCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(CardDarkHover),
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (isSelected) NeonIndigo.copy(alpha = 0.3f) else BgCardHover
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (peer.isWindows) Icons.Default.Home else Icons.Default.Phone,
                     contentDescription = null,
-                    tint = if (peer.isWindows) AccentSky else AccentGreen,
-                    modifier = Modifier.size(22.dp)
+                    tint = if (peer.isWindows) NeonSky else NeonMint,
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
@@ -742,7 +716,7 @@ fun DeviceCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = peer.deviceName,
-                    color = TextPrimary,
+                    color = TextPureWhite,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     maxLines = 1,
@@ -758,13 +732,13 @@ fun DeviceCard(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (isSelected) AccentCyan else CardDarkHover)
+                    .background(if (isSelected) NeonCyan else BgCardHover)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = if (isSelected) "Selected" else "Ready",
-                    color = if (isSelected) Color.Black else AccentSky,
-                    fontSize = 11.sp,
+                    text = if (isSelected) "SELECTED" else "READY",
+                    color = if (isSelected) Color.Black else NeonSky,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -778,11 +752,11 @@ fun FileItemRow(
     onRemove: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = CardDark),
-        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, BorderDark, RoundedCornerShape(10.dp))
+            .border(1.dp, BorderGlass, RoundedCornerShape(12.dp))
     ) {
         Row(
             modifier = Modifier
@@ -790,16 +764,15 @@ fun FileItemRow(
                 .padding(12.dp, 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Category Badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .background(CardDarkHover)
+                    .background(NeonIndigo.copy(alpha = 0.2f))
                     .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
                 Text(
                     text = file.fileCategory,
-                    color = AccentCyan,
+                    color = NeonCyan,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -810,7 +783,7 @@ fun FileItemRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.name,
-                    color = TextPrimary,
+                    color = TextPureWhite,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,

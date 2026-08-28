@@ -3,6 +3,7 @@ package com.example.speedshareandroid.ui
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -41,22 +42,22 @@ fun OnboardingScreen(
 ) {
     val pages = listOf(
         OnboardingPage(
-            title = "Zero-Config Discovery",
-            description = "Instantly discover Windows PCs and Android devices on the same Wi-Fi network without Bluetooth pairing or cables.",
+            title = "Zero-Config Instant Radar",
+            description = "Discover Windows PCs and Android devices on the same Wi-Fi instantly. No pairing or complex setup required.",
             icon = Icons.Default.Search,
-            accentColor = AccentCyan
+            accentColor = NeonCyan
         ),
         OnboardingPage(
-            title = "Ultra-Fast LAN Transfer",
-            description = "Stream files at line-rate Wi-Fi 6 & Gigabit speeds (100+ MB/s) with zero compression and zero size limits.",
+            title = "Ultra-Fast Direct Streaming",
+            description = "Stream files at line-rate Wi-Fi 6 & Gigabit speeds (200+ MB/s) directly peer-to-peer with zero compression.",
             icon = Icons.Default.Share,
-            accentColor = AccentSky
+            accentColor = NeonMint
         ),
         OnboardingPage(
-            title = "Private & Approval Gated",
-            description = "Files transfer directly peer-to-peer over your local network. You approve incoming transfers before anything is downloaded.",
+            title = "Full Transfer History",
+            description = "Track sent and received files, view speed logs, and 1-tap open or share received items at any time.",
             icon = Icons.Default.CheckCircle,
-            accentColor = AccentGreen
+            accentColor = NeonIndigo
         )
     )
 
@@ -66,7 +67,7 @@ fun OnboardingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgDark)
+            .background(BgMidnight)
     ) {
         // Ambient background glow
         Box(
@@ -74,7 +75,7 @@ fun OnboardingScreen(
                 .size(350.dp)
                 .offset((-80).dp, (-80).dp)
                 .clip(CircleShape)
-                .background(Brush.radialGradient(listOf(PrimaryBlue.copy(alpha = 0.15f), Color.Transparent)))
+                .background(Brush.radialGradient(listOf(NeonIndigo.copy(alpha = 0.2f), Color.Transparent)))
         )
 
         Column(
@@ -97,27 +98,27 @@ fun OnboardingScreen(
                     contentDescription = "SpeedShare Logo",
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Speed",
-                            color = TextPrimary,
+                            color = TextPureWhite,
                             fontWeight = FontWeight.Bold,
                             fontSize = 22.sp
                         )
                         Text(
                             text = "Share",
-                            color = AccentCyan,
+                            color = NeonCyan,
                             fontWeight = FontWeight.Bold,
                             fontSize = 22.sp
                         )
                     }
                     Text(
-                        text = "LOCAL HIGH-SPEED SHARING",
-                        color = TextSecondary,
+                        text = "PEER-TO-PEER GIGABIT TRANSFER",
+                        color = TextMuted,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
@@ -144,7 +145,12 @@ fun OnboardingScreen(
                         modifier = Modifier
                             .size(110.dp)
                             .clip(RoundedCornerShape(30.dp))
-                            .background(CardDark)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(page.accentColor.copy(alpha = 0.2f), BgCard)
+                                )
+                            )
+                            .border(1.5.dp, page.accentColor.copy(alpha = 0.4f), RoundedCornerShape(30.dp))
                             .padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -152,7 +158,7 @@ fun OnboardingScreen(
                             imageVector = page.icon,
                             contentDescription = null,
                             tint = page.accentColor,
-                            modifier = Modifier.size(52.dp)
+                            modifier = Modifier.size(54.dp)
                         )
                     }
 
@@ -160,7 +166,7 @@ fun OnboardingScreen(
 
                     Text(
                         text = page.title,
-                        color = TextPrimary,
+                        color = TextPureWhite,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
@@ -199,7 +205,7 @@ fun OnboardingScreen(
                                 .height(6.dp)
                                 .width(if (isCurrent) 24.dp else 6.dp)
                                 .clip(RoundedCornerShape(3.dp))
-                                .background(if (isCurrent) AccentCyan else CardDarkHover)
+                                .background(if (isCurrent) NeonCyan else BorderGlass)
                         )
                     }
                 }
@@ -219,8 +225,8 @@ fun OnboardingScreen(
                         .fillMaxWidth()
                         .height(54.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = AccentCyan,
-                        contentColor = Color.Black
+                        containerColor = NeonIndigo,
+                        contentColor = TextPureWhite
                     ),
                     shape = RoundedCornerShape(14.dp)
                 ) {

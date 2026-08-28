@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -31,47 +32,50 @@ fun HistoryItemCard(
     onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-
     val isSent = record.direction == TransferDirection.SENT
-    val directionColor = if (isSent) AccentSky else AccentGreen
-    val categoryIcon = getCategoryIcon(record.fileCategory)
+    val directionColor = if (isSent) NeonSky else NeonMint
+    val (categoryIcon, categoryColor) = getCategoryMeta(record.fileCategory)
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = CardDark),
-        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable {
                 if (record.status == TransferStatus.COMPLETED && record.filePath != null) {
                     onOpen()
                 }
             }
-            .border(1.dp, BorderDark, RoundedCornerShape(14.dp))
+            .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(14.dp)
         ) {
-            // Row 1: File icon + File Name + More Menu
+            // Row 1: Category Icon + File Details + Action Buttons
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Category Icon
+                // Category Icon with glow
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(CardDarkHover),
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(categoryColor.copy(alpha = 0.2f), BgCardElevated)
+                            )
+                        )
+                        .border(1.dp, categoryColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = categoryIcon,
                         contentDescription = null,
-                        tint = AccentCyan,
+                        tint = categoryColor,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -82,7 +86,7 @@ fun HistoryItemCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = record.fileName,
-                        color = TextPrimary,
+                        color = TextPureWhite,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         maxLines = 1,
@@ -93,91 +97,53 @@ fun HistoryItemCard(
                         Text(
                             text = record.formattedSize,
                             color = TextSecondary,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                         if (record.formattedSpeed.isNotEmpty()) {
                             Text(
                                 text = " • ${record.formattedSpeed}",
-                                color = AccentSky,
+                                color = NeonMint,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                // Action Menu
-                Box {
+                // Quick Action Icons: Share & Delete
+                if (record.status == TransferStatus.COMPLETED && record.filePath != null) {
                     IconButton(
-                        onClick = { menuExpanded = true },
+                        onClick = onShare,
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Options",
-                            tint = TextMuted,
-                            modifier = Modifier.size(18.dp)
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = NeonSky,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
+                }
 
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        modifier = Modifier.background(CardDark)
-                    ) {
-                        if (record.status == TransferStatus.COMPLETED && record.filePath != null) {
-                            DropdownMenuItem(
-                                text = { Text("Open File", color = TextPrimary) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = AccentCyan
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onOpen()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Share", color = TextPrimary) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Share,
-                                        contentDescription = null,
-                                        tint = AccentSky
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onShare()
-                                }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Remove from History", color = AccentRed) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = null,
-                                    tint = AccentRed
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onDelete()
-                            }
-                        )
-                    }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Remove",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = BorderDark, thickness = 0.5.dp)
+            HorizontalDivider(color = BorderGlass, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Row 2: Direction, Peer Name, Timestamp, and Status Badge
+            // Row 2: Direction Pill, Peer Name, Timestamp, and Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -187,16 +153,15 @@ fun HistoryItemCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(directionColor.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(directionColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isSent) Icons.Default.ArrowForward else Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            tint = directionColor,
-                            modifier = Modifier.size(12.dp)
+                        Text(
+                            text = if (isSent) "SENT" else "RCVD",
+                            color = directionColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                     Spacer(modifier = Modifier.width(6.dp))
@@ -220,9 +185,9 @@ fun HistoryItemCard(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     val (statusBg, statusFg, statusText) = when (record.status) {
-                        TransferStatus.COMPLETED -> Triple(AccentGreen.copy(alpha = 0.15f), AccentGreen, "Completed")
-                        TransferStatus.FAILED -> Triple(AccentRed.copy(alpha = 0.15f), AccentRed, "Failed")
-                        TransferStatus.CANCELLED -> Triple(Color(0xFFF59E0B).copy(alpha = 0.15f), Color(0xFFF59E0B), "Cancelled")
+                        TransferStatus.COMPLETED -> Triple(NeonEmerald.copy(alpha = 0.15f), NeonEmerald, "Success")
+                        TransferStatus.FAILED -> Triple(NeonRose.copy(alpha = 0.15f), NeonRose, "Failed")
+                        TransferStatus.CANCELLED -> Triple(NeonAmber.copy(alpha = 0.15f), NeonAmber, "Cancelled")
                     }
 
                     Box(
@@ -244,15 +209,15 @@ fun HistoryItemCard(
     }
 }
 
-private fun getCategoryIcon(category: String): ImageVector {
+private fun getCategoryMeta(category: String): Pair<ImageVector, Color> {
     return when (category) {
-        "VIDEO" -> Icons.Default.PlayArrow
-        "IMAGE" -> Icons.Default.Face
-        "AUDIO" -> Icons.Default.Notifications
-        "ARCHIVE" -> Icons.Default.ShoppingCart
-        "DOCUMENT" -> Icons.Default.Edit
-        "APP" -> Icons.Default.Phone
-        "CODE" -> Icons.Default.Info
-        else -> Icons.Default.Menu
+        "VIDEO" -> Pair(Icons.Default.PlayArrow, NeonViolet)
+        "IMAGE" -> Pair(Icons.Default.Face, NeonCyan)
+        "AUDIO" -> Pair(Icons.Default.Notifications, NeonMint)
+        "ARCHIVE" -> Pair(Icons.Default.ShoppingCart, NeonAmber)
+        "DOCUMENT" -> Pair(Icons.Default.Edit, NeonSky)
+        "APP" -> Pair(Icons.Default.Phone, NeonIndigo)
+        "CODE" -> Pair(Icons.Default.Info, NeonEmerald)
+        else -> Pair(Icons.Default.Menu, TextSecondary)
     }
 }
