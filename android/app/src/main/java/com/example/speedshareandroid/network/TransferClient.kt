@@ -2,9 +2,8 @@ package com.example.speedshareandroid.network
 
 import android.content.Context
 import android.util.Log
-import com.example.speedshareandroid.models.DiscoveredPeer
-import com.example.speedshareandroid.models.FileItem
-import com.example.speedshareandroid.models.TransferProgress
+import com.example.speedshareandroid.data.HistoryRepository
+import com.example.speedshareandroid.models.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +19,10 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
 
-class TransferClient(private val context: Context) {
+class TransferClient(
+    private val context: Context,
+    private val historyRepository: HistoryRepository
+) {
     companion object {
         private const val CHUNK_SIZE = 1024 * 1024 // 1 MB buffer
         private const val TAG = "TransferClient"
@@ -51,6 +53,7 @@ class TransferClient(private val context: Context) {
         val sessionId = UUID.randomUUID().toString().replace("-", "")
         val socket = Socket()
         activeSocket = socket
+        var averageSpeed = 0.0
 
         try {
             socket.tcpNoDelay = true
@@ -100,7 +103,22 @@ class TransferClient(private val context: Context) {
 
             val action = responseJson.optString("action")
             if (action != "TRANSFER_ACCEPT") {
-                val reason = responseJson.optString("reason", "Transfer was declined by the recipient")
+                val reason = responseJson.optString("reason", "Transfer was declined by recipient")
+
+                files.forEach { f ->
+                    historyRepository.addRecord(
+                        TransferRecord(
+                            fileName = f.name,
+                            fileSize = f.size,
+                            mimeType = f.mimeType,
+                            direction = TransferDirection.SENT,
+                            status = TransferStatus.CANCELLED,
+                            peerName = targetPeer.deviceName,
+                            peerIp = targetPeer.ipAddress
+                        )
+                    )
+                }
+
                 _transferResultFlow.emit(Pair(false, reason))
                 return@withContext
             }
@@ -146,6 +164,7 @@ class TransferClient(private val context: Context) {
                         if (now - lastReportTime >= 200 || totalBytesSent == totalSize) {
                             val deltaSec = (now - lastReportTime) / 1000.0
                             val speed = if (deltaSec > 0) (totalBytesSent - lastReportBytes) / deltaSec else 0.0
+                            averageSpeed = speed
                             val remainingBytes = Math.max(0L, totalSize - totalBytesSent)
                             val eta = if (speed > 0) (remainingBytes / speed).toLong() else 0L
 
@@ -169,6 +188,20 @@ class TransferClient(private val context: Context) {
                 } finally {
                     try { inStream?.close() } catch (e: Exception) {}
                 }
+
+                // Add record to history
+                historyRepository.addRecord(
+                    TransferRecord(
+                        fileName = fileItem.name,
+                        fileSize = fileItem.size,
+                        mimeType = fileItem.mimeType,
+                        direction = TransferDirection.SENT,
+                        status = TransferStatus.COMPLETED,
+                        peerName = targetPeer.deviceName,
+                        peerIp = targetPeer.ipAddress,
+                        speedBytesPerSec = averageSpeed
+                    )
+                )
             }
 
             // 4. Read final completion confirmation
@@ -179,6 +212,21 @@ class TransferClient(private val context: Context) {
             _transferResultFlow.emit(Pair(true, null))
         } catch (e: Exception) {
             Log.e(TAG, "Send error: ${e.message}")
+
+            files.forEach { f ->
+                historyRepository.addRecord(
+                    TransferRecord(
+                        fileName = f.name,
+                        fileSize = f.size,
+                        mimeType = f.mimeType,
+                        direction = TransferDirection.SENT,
+                        status = TransferStatus.FAILED,
+                        peerName = targetPeer.deviceName,
+                        peerIp = targetPeer.ipAddress
+                    )
+                )
+            }
+
             _transferResultFlow.emit(Pair(false, e.message ?: "Transfer error"))
         } finally {
             try { socket.close() } catch (e: Exception) {}

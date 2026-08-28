@@ -1,6 +1,20 @@
 package com.example.speedshareandroid.models
 
 import android.net.Uri
+import java.text.SimpleDateFormat
+import java.util.*
+
+enum class TransferDirection {
+    SENT, RECEIVED
+}
+
+enum class TransferStatus {
+    COMPLETED, FAILED, CANCELLED
+}
+
+enum class HistoryFilter {
+    ALL, RECEIVED, SENT, FAILED
+}
 
 data class DiscoveredPeer(
     val deviceId: String,
@@ -26,18 +40,7 @@ data class FileItem(
     val formattedSize: String get() = formatBytes(size)
 
     val fileCategory: String
-        get() {
-            val lower = name.lowercase()
-            return when {
-                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".avi") || lower.endsWith(".mov") || lower.endsWith(".webm") -> "VIDEO"
-                lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".gif") -> "IMAGE"
-                lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") || lower.endsWith(".m4a") || lower.endsWith(".aac") -> "AUDIO"
-                lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".7z") || lower.endsWith(".tar") || lower.endsWith(".gz") || lower.endsWith(".iso") -> "ARCHIVE"
-                lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx") || lower.endsWith(".xls") || lower.endsWith(".xlsx") || lower.endsWith(".ppt") || lower.endsWith(".txt") -> "DOCUMENT"
-                lower.endsWith(".kt") || lower.endsWith(".java") || lower.endsWith(".cs") || lower.endsWith(".py") || lower.endsWith(".cpp") || lower.endsWith(".js") || lower.endsWith(".json") -> "CODE"
-                else -> "FILE"
-            }
-        }
+        get() = getCategoryForFileName(name)
 
     companion object {
         fun formatBytes(bytes: Long): String {
@@ -46,7 +49,72 @@ data class FileItem(
             if (bytes < 1024 * 1024 * 1024) return String.format("%.2f MB", bytes / (1024.0 * 1024.0))
             return String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
         }
+
+        fun getCategoryForFileName(name: String): String {
+            val lower = name.lowercase()
+            return when {
+                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".avi") || lower.endsWith(".mov") || lower.endsWith(".webm") || lower.endsWith(".3gp") -> "VIDEO"
+                lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".heic") || lower.endsWith(".svg") -> "IMAGE"
+                lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") || lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".ogg") -> "AUDIO"
+                lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".7z") || lower.endsWith(".tar") || lower.endsWith(".gz") || lower.endsWith(".iso") -> "ARCHIVE"
+                lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx") || lower.endsWith(".xls") || lower.endsWith(".xlsx") || lower.endsWith(".ppt") || lower.endsWith(".pptx") || lower.endsWith(".txt") -> "DOCUMENT"
+                lower.endsWith(".apk") || lower.endsWith(".aab") || lower.endsWith(".xapk") -> "APP"
+                lower.endsWith(".kt") || lower.endsWith(".java") || lower.endsWith(".cs") || lower.endsWith(".py") || lower.endsWith(".cpp") || lower.endsWith(".js") || lower.endsWith(".ts") || lower.endsWith(".json") || lower.endsWith(".html") || lower.endsWith(".css") -> "CODE"
+                else -> "FILE"
+            }
+        }
     }
+}
+
+data class TransferRecord(
+    val id: String = UUID.randomUUID().toString(),
+    val fileName: String,
+    val filePath: String? = null,
+    val fileSize: Long,
+    val mimeType: String = "application/octet-stream",
+    val direction: TransferDirection,
+    val status: TransferStatus,
+    val peerName: String,
+    val peerIp: String,
+    val speedBytesPerSec: Double = 0.0,
+    val timestamp: Long = System.currentTimeMillis()
+) {
+    val formattedSize: String get() = FileItem.formatBytes(fileSize)
+
+    val formattedSpeed: String
+        get() {
+            if (speedBytesPerSec <= 0) return ""
+            if (speedBytesPerSec < 1024 * 1024) {
+                return String.format("%.1f KB/s", speedBytesPerSec / 1024.0)
+            }
+            return String.format("%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
+        }
+
+    val fileCategory: String get() = FileItem.getCategoryForFileName(fileName)
+
+    val formattedDateTime: String
+        get() {
+            val now = Calendar.getInstance()
+            val recordDate = Calendar.getInstance().apply { timeInMillis = timestamp }
+
+            val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+            val formattedTime = timeFormat.format(Date(timestamp))
+
+            return when {
+                now.get(Calendar.YEAR) == recordDate.get(Calendar.YEAR) &&
+                now.get(Calendar.DAY_OF_YEAR) == recordDate.get(Calendar.DAY_OF_YEAR) -> {
+                    "Today, $formattedTime"
+                }
+                now.get(Calendar.YEAR) == recordDate.get(Calendar.YEAR) &&
+                now.get(Calendar.DAY_OF_YEAR) - recordDate.get(Calendar.DAY_OF_YEAR) == 1 -> {
+                    "Yesterday, $formattedTime"
+                }
+                else -> {
+                    val dateFormat = SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault())
+                    dateFormat.format(Date(timestamp))
+                }
+            }
+        }
 }
 
 data class TransferProgress(

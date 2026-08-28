@@ -4,9 +4,8 @@ import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.Environment
 import android.util.Log
-import com.example.speedshareandroid.models.FileItem
-import com.example.speedshareandroid.models.IncomingTransferRequest
-import com.example.speedshareandroid.models.TransferProgress
+import com.example.speedshareandroid.data.HistoryRepository
+import com.example.speedshareandroid.models.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,9 +20,11 @@ import java.io.FileOutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.nio.ByteBuffer
 
-class TransferServer(private val context: Context) {
+class TransferServer(
+    private val context: Context,
+    private val historyRepository: HistoryRepository
+) {
     companion object {
         const val DEFAULT_PORT = 53318
         private const val CHUNK_SIZE = 1024 * 1024 // 1 MB buffer
@@ -108,6 +109,11 @@ class TransferServer(private val context: Context) {
     }
 
     private suspend fun handleClient(socket: Socket) = withContext(Dispatchers.IO) {
+        var currentSenderDevice = "Unknown Device"
+        var currentSenderIp = socket.inetAddress.hostAddress ?: ""
+        val receivedFilesList = mutableListOf<FileItem>()
+        var averageSpeed = 0.0
+
         try {
             val inputStream = DataInputStream(socket.getInputStream())
             val outputStream = DataOutputStream(socket.getOutputStream())
@@ -129,15 +135,14 @@ class TransferServer(private val context: Context) {
             }
 
             val sessionId = json.optString("sessionId")
-            val senderDevice = json.optString("senderDevice")
+            currentSenderDevice = json.optString("senderDevice", "Remote Device")
             val devType = json.optString("deviceType", "WINDOWS")
             val totalSize = json.optLong("totalSize")
             val filesJson = json.optJSONArray("files") ?: JSONArray()
 
-            val files = mutableListOf<FileItem>()
             for (i in 0 until filesJson.length()) {
                 val fObj = filesJson.getJSONObject(i)
-                files.add(
+                receivedFilesList.add(
                     FileItem(
                         id = fObj.optString("id", i.toString()),
                         name = fObj.optString("name", "file_$i"),
@@ -147,14 +152,13 @@ class TransferServer(private val context: Context) {
                 )
             }
 
-            val senderIp = socket.inetAddress.hostAddress ?: ""
             val request = IncomingTransferRequest(
                 sessionId = sessionId,
-                senderDevice = senderDevice,
+                senderDevice = currentSenderDevice,
                 deviceType = devType,
-                files = files,
+                files = receivedFilesList,
                 totalSize = totalSize,
-                senderIp = senderIp
+                senderIp = currentSenderIp
             )
 
             // Prompt user
@@ -173,6 +177,22 @@ class TransferServer(private val context: Context) {
                 outputStream.writeInt(declineJson.size)
                 outputStream.write(declineJson)
                 outputStream.flush()
+
+                // Record declined / cancelled entries in history
+                receivedFilesList.forEach { f ->
+                    historyRepository.addRecord(
+                        TransferRecord(
+                            fileName = f.name,
+                            fileSize = f.size,
+                            mimeType = f.mimeType,
+                            direction = TransferDirection.RECEIVED,
+                            status = TransferStatus.CANCELLED,
+                            peerName = currentSenderDevice,
+                            peerIp = currentSenderIp
+                        )
+                    )
+                }
+
                 _transferCompletedFlow.emit(Pair(false, "Declined by user"))
                 return@withContext
             }
@@ -192,15 +212,15 @@ class TransferServer(private val context: Context) {
                 "SpeedShare"
             ).apply { if (!exists()) mkdirs() }
 
-            // High speed stream receiver
+            // High-speed stream receiver
             var totalBytesTransferred = 0L
             val buffer = ByteArray(CHUNK_SIZE)
             val startTime = System.currentTimeMillis()
             var lastReportTime = startTime
             var lastReportBytes = 0L
 
-            for (i in files.indices) {
-                val fileMeta = files[i]
+            for (i in receivedFilesList.indices) {
+                val fileMeta = receivedFilesList[i]
 
                 // Read file index & size
                 val fileIndex = inputStream.readInt()
@@ -224,6 +244,7 @@ class TransferServer(private val context: Context) {
                         if (now - lastReportTime >= 200 || totalBytesTransferred == totalSize) {
                             val deltaSec = (now - lastReportTime) / 1000.0
                             val speed = if (deltaSec > 0) (totalBytesTransferred - lastReportBytes) / deltaSec else 0.0
+                            averageSpeed = speed
                             val remainingBytes = Math.max(0L, totalSize - totalBytesTransferred)
                             val eta = if (speed > 0) (remainingBytes / speed).toLong() else 0L
 
@@ -231,7 +252,7 @@ class TransferServer(private val context: Context) {
                                 sessionId = sessionId,
                                 currentFileName = safeFileName,
                                 currentFileIndex = i + 1,
-                                totalFiles = files.size,
+                                totalFiles = receivedFilesList.size,
                                 transferredBytes = totalBytesTransferred,
                                 totalBytes = totalSize,
                                 percentage = if (totalSize > 0) (totalBytesTransferred.toFloat() / totalSize.toFloat() * 100f) else 100f,
@@ -245,6 +266,21 @@ class TransferServer(private val context: Context) {
                     }
                     fos.flush()
                 }
+
+                // Add successful history record
+                historyRepository.addRecord(
+                    TransferRecord(
+                        fileName = destFile.name,
+                        filePath = destFile.absolutePath,
+                        fileSize = fileSize,
+                        mimeType = fileMeta.mimeType,
+                        direction = TransferDirection.RECEIVED,
+                        status = TransferStatus.COMPLETED,
+                        peerName = currentSenderDevice,
+                        peerIp = currentSenderIp,
+                        speedBytesPerSec = averageSpeed
+                    )
+                )
 
                 // Notify media scanner
                 try {
@@ -267,7 +303,25 @@ class TransferServer(private val context: Context) {
             _transferCompletedFlow.emit(Pair(true, null))
         } catch (e: Exception) {
             Log.e(TAG, "Transfer receive error: ${e.message}")
-            _transferCompletedFlow.emit(Pair(false, e.message ?: "Transfer error"))
+
+            // Log failed transfer to history
+            if (receivedFilesList.isNotEmpty()) {
+                receivedFilesList.forEach { f ->
+                    historyRepository.addRecord(
+                        TransferRecord(
+                            fileName = f.name,
+                            fileSize = f.size,
+                            mimeType = f.mimeType,
+                            direction = TransferDirection.RECEIVED,
+                            status = TransferStatus.FAILED,
+                            peerName = currentSenderDevice,
+                            peerIp = currentSenderIp
+                        )
+                    )
+                }
+            }
+
+            _transferCompletedFlow.emit(Pair(false, e.message ?: "Transfer interrupted"))
         } finally {
             try { socket.close() } catch (e: Exception) {}
             activeSocket = null

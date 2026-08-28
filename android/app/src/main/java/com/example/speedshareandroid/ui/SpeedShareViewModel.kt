@@ -2,93 +2,128 @@ package com.example.speedshareandroid.ui
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.speedshareandroid.models.DiscoveredPeer
-import com.example.speedshareandroid.models.FileItem
-import com.example.speedshareandroid.models.IncomingTransferRequest
-import com.example.speedshareandroid.models.TransferProgress
+import com.example.speedshareandroid.data.HistoryRepository
+import com.example.speedshareandroid.models.*
 import com.example.speedshareandroid.network.DiscoveryManager
 import com.example.speedshareandroid.network.TransferClient
 import com.example.speedshareandroid.network.TransferServer
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.UUID
+import java.io.File
+
+enum class AppTab {
+    SHARE, HISTORY, SETTINGS
+}
 
 class SpeedShareViewModel(application: Application) : AndroidViewModel(application) {
 
-    val discoveryManager = DiscoveryManager(application)
-    val transferServer = TransferServer(application)
-    val transferClient = TransferClient(application)
+    private val context: Context get() = getApplication<Application>().applicationContext
+    private val prefs = context.getSharedPreferences("speedshare_prefs", Context.MODE_PRIVATE)
 
-    val peers = discoveryManager.peersFlow
+    val historyRepository = HistoryRepository(context)
+    val discoveryManager: DiscoveryManager
+    val transferServer: TransferServer
+    val transferClient: TransferClient
 
+    // Tab state
+    private val _selectedTab = MutableStateFlow(AppTab.SHARE)
+    val selectedTab: StateFlow<AppTab> = _selectedTab.asStateFlow()
+
+    // Device Discovery State
+    val peers: StateFlow<List<DiscoveredPeer>>
     private val _selectedPeer = MutableStateFlow<DiscoveredPeer?>(null)
-    val selectedPeer = _selectedPeer.asStateFlow()
+    val selectedPeer: StateFlow<DiscoveredPeer?> = _selectedPeer.asStateFlow()
 
+    // Queued Files State
     private val _selectedFiles = MutableStateFlow<List<FileItem>>(emptyList())
-    val selectedFiles = _selectedFiles.asStateFlow()
+    val selectedFiles: StateFlow<List<FileItem>> = _selectedFiles.asStateFlow()
 
+    // Active Transfer / Modals State
     private val _incomingRequest = MutableStateFlow<IncomingTransferRequest?>(null)
-    val incomingRequest = _incomingRequest.asStateFlow()
+    val incomingRequest: StateFlow<IncomingTransferRequest?> = _incomingRequest.asStateFlow()
 
     private val _isTransferring = MutableStateFlow(false)
-    val isTransferring = _isTransferring.asStateFlow()
+    val isTransferring: StateFlow<Boolean> = _isTransferring.asStateFlow()
 
-    private val _transferProgress = MutableStateFlow<TransferProgress?>(null)
-    val transferProgress = _transferProgress.asStateFlow()
+    private val _transferStatusDialog = MutableStateFlow<Pair<Boolean, String?>?>(null)
+    val transferStatusDialog: StateFlow<Pair<Boolean, String?>?> = _transferStatusDialog.asStateFlow()
 
-    private val _transferStatusDialog = MutableStateFlow<Pair<Boolean, String?>?>(null) // (success, message)
-    val transferStatusDialog = _transferStatusDialog.asStateFlow()
+    // History Tab Filter & Search
+    val allHistoryRecords = historyRepository.records
+    private val _historySearchQuery = MutableStateFlow("")
+    val historySearchQuery: StateFlow<String> = _historySearchQuery.asStateFlow()
+
+    private val _historyFilter = MutableStateFlow(HistoryFilter.ALL)
+    val historyFilter: StateFlow<HistoryFilter> = _historyFilter.asStateFlow()
+
+    val filteredHistoryRecords: StateFlow<List<TransferRecord>> = combine(
+        allHistoryRecords,
+        _historySearchQuery,
+        _historyFilter
+    ) { records, query, filter ->
+        historyRepository.filterRecords(records, query, filter)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Device Settings State
+    private val _customDeviceName = MutableStateFlow(
+        prefs.getString("device_name", "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}") ?: "Android Device"
+    )
+    val customDeviceName: StateFlow<String> = _customDeviceName.asStateFlow()
 
     init {
-        discoveryManager.start()
-        transferServer.start()
+        discoveryManager = DiscoveryManager(context).apply {
+            deviceName = _customDeviceName.value
+        }
+        peers = discoveryManager.peersFlow
 
-        // Collect incoming requests
+        transferServer = TransferServer(context, historyRepository)
+        transferClient = TransferClient(context, historyRepository)
+
+        transferServer.start()
+        discoveryManager.start()
+
+        // Listen for incoming transfer requests
         viewModelScope.launch {
             transferServer.incomingRequestFlow.collect { req ->
                 _incomingRequest.value = req
             }
         }
 
-        // Collect server progress
+        // Listen for server completion
         viewModelScope.launch {
-            transferServer.progressFlow.collect { p ->
-                if (_isTransferring.value) {
-                    _transferProgress.value = p
-                }
-            }
-        }
-
-        // Collect client progress
-        viewModelScope.launch {
-            transferClient.progressFlow.collect { p ->
-                if (_isTransferring.value) {
-                    _transferProgress.value = p
-                }
-            }
-        }
-
-        // Server transfer completion
-        viewModelScope.launch {
-            transferServer.transferCompletedFlow.collect { (success, err) ->
+            transferServer.transferCompletedFlow.collect { result ->
                 _isTransferring.value = false
-                _transferProgress.value = null
-                _transferStatusDialog.value = Pair(success, if (success) "Files saved to Downloads/SpeedShare" else err)
+                _transferStatusDialog.value = result
             }
         }
 
-        // Client transfer completion
+        // Listen for client completion
         viewModelScope.launch {
-            transferClient.transferResultFlow.collect { (success, err) ->
+            transferClient.transferResultFlow.collect { result ->
                 _isTransferring.value = false
-                _transferProgress.value = null
-                _transferStatusDialog.value = Pair(success, if (success) "All files sent successfully" else err)
+                _transferStatusDialog.value = result
             }
         }
+    }
+
+    fun selectTab(tab: AppTab) {
+        _selectedTab.value = tab
+    }
+
+    fun setHistorySearchQuery(query: String) {
+        _historySearchQuery.value = query
+    }
+
+    fun setHistoryFilter(filter: HistoryFilter) {
+        _historyFilter.value = filter
     }
 
     fun selectPeer(peer: DiscoveredPeer) {
@@ -99,31 +134,33 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
         _selectedPeer.value = null
     }
 
-    fun addFilesFromUris(context: Context, uris: List<Uri>) {
+    fun refreshDiscovery() {
+        discoveryManager.broadcastBeacon()
+    }
+
+    fun addFilesFromUris(ctx: Context, uris: List<Uri>) {
         val currentList = _selectedFiles.value.toMutableList()
-        val resolver = context.contentResolver
 
         for (uri in uris) {
             var fileName = "unknown_file"
             var fileSize = 0L
-            val mimeType = resolver.getType(uri) ?: "application/octet-stream"
 
-            resolver.query(uri, null, null, null, null)?.use { cursor ->
+            ctx.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
                 if (cursor.moveToFirst()) {
-                    if (nameIndex != -1) fileName = cursor.getString(nameIndex)
+                    if (nameIndex != -1) fileName = cursor.getString(nameIndex) ?: "file"
                     if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
                 }
             }
 
-            if (!currentList.any { it.uri == uri }) {
+            if (currentList.none { it.uri == uri }) {
                 currentList.add(
                     FileItem(
-                        id = UUID.randomUUID().toString(),
+                        id = uri.toString(),
                         name = fileName,
                         size = fileSize,
-                        mimeType = mimeType,
+                        mimeType = ctx.contentResolver.getType(uri) ?: "application/octet-stream",
                         uri = uri
                     )
                 )
@@ -146,18 +183,6 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
         if (files.isEmpty() || _isTransferring.value) return
 
         _isTransferring.value = true
-        _transferProgress.value = TransferProgress(
-            sessionId = "",
-            currentFileName = "Connecting to ${peer.deviceName}...",
-            currentFileIndex = 0,
-            totalFiles = files.size,
-            transferredBytes = 0L,
-            totalBytes = files.sumOf { it.size },
-            percentage = 0f,
-            speedBytesPerSec = 0.0,
-            etaSeconds = 0
-        )
-
         viewModelScope.launch {
             transferClient.sendFiles(peer, discoveryManager.deviceName, files)
         }
@@ -178,15 +203,95 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
         transferClient.cancel()
         transferServer.cancelTransfer()
         _isTransferring.value = false
-        _transferProgress.value = null
+        _transferStatusDialog.value = Pair(false, "Transfer cancelled.")
     }
 
     fun dismissStatusDialog() {
         _transferStatusDialog.value = null
     }
 
-    fun refreshDiscovery() {
-        discoveryManager.broadcastBeacon()
+    // Active progress combining server or client
+    val transferProgress = combine(
+        transferServer.progressFlow,
+        transferClient.progressFlow
+    ) { serverProg, clientProg ->
+        clientProg ?: serverProg
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // History Actions
+    fun deleteHistoryRecord(recordId: String) {
+        viewModelScope.launch {
+            historyRepository.deleteRecord(recordId)
+        }
+    }
+
+    fun clearAllHistory() {
+        viewModelScope.launch {
+            historyRepository.clearAll()
+        }
+    }
+
+    fun openFile(ctx: Context, record: TransferRecord) {
+        try {
+            if (record.filePath != null) {
+                val file = File(record.filePath)
+                if (file.exists()) {
+                    val uri = FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.fileprovider",
+                        file
+                    )
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, record.mimeType)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    ctx.startActivity(intent)
+                    return
+                }
+            }
+            Toast.makeText(ctx, "File not found on local storage", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "Could not open file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun shareFile(ctx: Context, record: TransferRecord) {
+        try {
+            if (record.filePath != null) {
+                val file = File(record.filePath)
+                if (file.exists()) {
+                    val uri = FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.fileprovider",
+                        file
+                    )
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = record.mimeType
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    val chooser = Intent.createChooser(intent, "Share ${record.fileName}").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    ctx.startActivity(chooser)
+                    return
+                }
+            }
+            Toast.makeText(ctx, "File not found on local storage", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "Could not share file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun updateDeviceName(newName: String) {
+        if (newName.isNotBlank()) {
+            val trimmed = newName.trim()
+            _customDeviceName.value = trimmed
+            prefs.edit().putString("device_name", trimmed).apply()
+            discoveryManager.deviceName = trimmed
+            discoveryManager.broadcastBeacon()
+        }
     }
 
     override fun onCleared() {
