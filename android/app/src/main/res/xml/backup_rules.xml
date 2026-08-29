@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+    <!-- android:allowBackup="false" in the manifest means nothing is
+         backed up. The rules below exist for documentation only and
+         are not consulted. They are kept under the legacy <full-backup-content>
+         schema for compatibility with API 24..30. -->
     <include domain="sharedpref" path="speedshare_prefs.xml" />
-    <exclude domain="file" path="transfer_history.json" />
-    <exclude domain="cache" path="." />
 </full-backup-content>

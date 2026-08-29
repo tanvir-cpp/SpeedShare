@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
+    <!-- android:allowBackup="false" in the manifest means nothing is
+         backed up or transferred. The rules below are kept for
+         documentation and would only take effect if that flag is
+         flipped in the future. -->
     <cloud-backup>
         <include domain="sharedpref" path="speedshare_prefs.xml" />
-        <exclude domain="file" path="transfer_history.json" />
-        <exclude domain="cache" path="." />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="speedshare_prefs.xml" />
-        <exclude domain="file" path="transfer_history.json" />
-        <exclude domain="cache" path="." />
     </device-transfer>
 </data-extraction-rules>
