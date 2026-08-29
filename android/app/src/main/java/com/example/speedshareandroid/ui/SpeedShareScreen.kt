@@ -99,7 +99,7 @@ fun SpeedShareScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "Wi-Fi 6",
+                                        text = "LAN Transfer",
                                         color = NeonMint,
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold
@@ -264,7 +264,7 @@ fun SpeedShareScreen(
                         onSelectPeer = { p -> if (selectedPeer?.deviceId == p.deviceId) viewModel.clearSelectedPeer() else viewModel.selectPeer(p) },
                         onPickCategory = { mime ->
                             activePickerMime = mime
-                            filePickerLauncher.launch(if (mime == "*/*") arrayOf("*/*") else arrayOf(mime, "*/*"))
+                            filePickerLauncher.launch(if (mime == "*/*") arrayOf("*/*") else arrayOf(mime))
                         },
                         onRemoveFile = { f -> viewModel.removeFile(f) },
                         onClearFiles = { viewModel.clearFiles() }

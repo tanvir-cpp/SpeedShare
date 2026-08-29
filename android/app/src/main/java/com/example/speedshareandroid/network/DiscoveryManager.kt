@@ -67,11 +67,17 @@ class DiscoveryManager(private val context: Context) {
         // Start listening
         scope?.launch { listenLoop() }
 
+        // Send initial discover ping & beacon
+        scope?.launch {
+            broadcastDiscover()
+            broadcastBeacon()
+        }
+
         // Start periodic beacon
         scope?.launch {
             while (isActive) {
-                broadcastBeacon()
                 delay(1500)
+                broadcastBeacon()
             }
         }
 
@@ -118,30 +124,50 @@ class DiscoveryManager(private val context: Context) {
                 val type = json.optString("type")
                 val senderDeviceId = json.optString("deviceId")
 
-                if (type == "BEACON" && senderDeviceId.isNotEmpty() && senderDeviceId != deviceId) {
-                    val name = json.optString("deviceName", "Unknown Device")
-                    val devType = json.optString("deviceType", "UNKNOWN")
-                    val port = json.optInt("port", DEFAULT_TRANSFER_PORT)
-                    var senderIp = packet.address.hostAddress ?: ""
-                    if (senderIp.startsWith("::ffff:")) senderIp = senderIp.substring(7)
+                if (senderDeviceId.isNotEmpty() && senderDeviceId != deviceId) {
+                    if (type == "DISCOVER") {
+                        broadcastBeacon()
+                    } else if (type == "BEACON") {
+                        val name = json.optString("deviceName", "Unknown Device")
+                        val devType = json.optString("deviceType", "UNKNOWN")
+                        val port = json.optInt("port", DEFAULT_TRANSFER_PORT)
+                        var senderIp = packet.address.hostAddress ?: ""
+                        if (senderIp.startsWith("::ffff:")) senderIp = senderIp.substring(7)
 
-                    val peer = DiscoveredPeer(
-                        deviceId = senderDeviceId,
-                        deviceName = name,
-                        deviceType = devType,
-                        ipAddress = senderIp,
-                        port = port,
-                        lastSeen = System.currentTimeMillis()
-                    )
+                        val peer = DiscoveredPeer(
+                            deviceId = senderDeviceId,
+                            deviceName = name,
+                            deviceType = devType,
+                            ipAddress = senderIp,
+                            port = port,
+                            lastSeen = System.currentTimeMillis()
+                        )
 
-                    _peers[peer.deviceId] = peer
-                    _peersFlow.value = _peers.values.toList()
+                        _peers[peer.deviceId] = peer
+                        _peersFlow.value = _peers.values.toList()
+                    }
                 }
             } catch (e: Exception) {
                 if (scope?.isActive == true) {
                     Log.d(TAG, "Discovery receive warning: ${e.message}")
                 }
             }
+        }
+    }
+
+    fun broadcastDiscover() {
+        try {
+            val json = JSONObject().apply {
+                put("type", "DISCOVER")
+                put("deviceId", deviceId)
+                put("deviceName", deviceName)
+                put("deviceType", "ANDROID")
+                put("port", DEFAULT_TRANSFER_PORT)
+                put("version", 1)
+            }
+            sendToAllInterfaces(json.toString().toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            Log.d(TAG, "Discover broadcast error: ${e.message}")
         }
     }
 
@@ -155,14 +181,22 @@ class DiscoveryManager(private val context: Context) {
                 put("port", DEFAULT_TRANSFER_PORT)
                 put("version", 1)
             }
-            val data = json.toString().toByteArray(Charsets.UTF_8)
+            sendToAllInterfaces(json.toString().toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            Log.d(TAG, "Broadcast error: ${e.message}")
+        }
+    }
 
-            // Send to global broadcast 255.255.255.255
+    private fun sendToAllInterfaces(data: ByteArray) {
+        // Send to global broadcast 255.255.255.255
+        try {
             val broadcastAddr = InetAddress.getByName("255.255.255.255")
             val packet = DatagramPacket(data, data.size, broadcastAddr, DISCOVERY_PORT)
             socket?.send(packet)
+        } catch (e: Exception) { }
 
-            // Also broadcast on each interface broadcast address for best Wi-Fi compatibility
+        // Also broadcast on each interface broadcast address for best Wi-Fi compatibility
+        try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val networkInterface = interfaces.nextElement()
@@ -175,9 +209,7 @@ class DiscoveryManager(private val context: Context) {
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.d(TAG, "Broadcast error: ${e.message}")
-        }
+        } catch (e: Exception) { }
     }
 
     private fun cleanupStalePeers() {

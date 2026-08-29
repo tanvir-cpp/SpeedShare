@@ -114,6 +114,12 @@ class TransferServer(
         val receivedFilesList = mutableListOf<FileItem>()
         var averageSpeed = 0.0
 
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SpeedShare:TransferServerWakeLock")?.apply {
+            setReferenceCounted(false)
+            acquire(15 * 60 * 1000L) // 15 min safety timeout
+        }
+
         try {
             val inputStream = DataInputStream(socket.getInputStream())
             val outputStream = DataOutputStream(socket.getOutputStream())
@@ -221,6 +227,7 @@ class TransferServer(
 
             for (i in receivedFilesList.indices) {
                 val fileMeta = receivedFilesList[i]
+                val fileStartTime = System.currentTimeMillis()
 
                 // Read file index & size
                 val fileIndex = inputStream.readInt()
@@ -267,7 +274,10 @@ class TransferServer(
                     fos.flush()
                 }
 
-                // Add successful history record
+                val fileDurationSec = (System.currentTimeMillis() - fileStartTime) / 1000.0
+                val fileAverageSpeed = if (fileDurationSec > 0) fileSize / fileDurationSec else averageSpeed
+
+                // Add successful history record with true average speed
                 historyRepository.addRecord(
                     TransferRecord(
                         fileName = destFile.name,
@@ -278,7 +288,7 @@ class TransferServer(
                         status = TransferStatus.COMPLETED,
                         peerName = currentSenderDevice,
                         peerIp = currentSenderIp,
-                        speedBytesPerSec = averageSpeed
+                        speedBytesPerSec = fileAverageSpeed
                     )
                 )
 
@@ -323,6 +333,9 @@ class TransferServer(
 
             _transferCompletedFlow.emit(Pair(false, e.message ?: "Transfer interrupted"))
         } finally {
+            try {
+                if (wakeLock?.isHeld == true) wakeLock.release()
+            } catch (e: Exception) {}
             try { socket.close() } catch (e: Exception) {}
             activeSocket = null
         }

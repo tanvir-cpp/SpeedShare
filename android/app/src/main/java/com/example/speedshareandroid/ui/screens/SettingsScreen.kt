@@ -137,7 +137,7 @@ fun SettingsScreen(
             }
         }
 
-        // Section 2: Storage & Buffer
+        // Section 2: Storage & Downloads
         Text(
             text = "STORAGE & DOWNLOADS",
             color = TextMuted,
@@ -161,22 +161,22 @@ fun SettingsScreen(
             ) {
                 SettingsItem(
                     icon = Icons.Default.LocationOn,
-                    title = "Download Location",
+                    title = "Target Storage Folder",
                     value = "Internal Storage / Download / SpeedShare",
                     accentColor = NeonCyan
                 )
                 SettingsItem(
                     icon = Icons.Default.CheckCircle,
-                    title = "Transfer Engine",
-                    value = "Raw Direct Socket Streaming (2MB Buffers)",
+                    title = "Transfer Architecture",
+                    value = "High-Throughput Raw TCP Streaming (2MB Buffers)",
                     accentColor = NeonMint
                 )
             }
         }
 
-        // Section 3: Network Diagnostics
+        // Section 3: Network Configuration
         Text(
-            text = "NETWORK DIAGNOSTICS",
+            text = "NETWORK CONFIGURATION",
             color = TextMuted,
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
@@ -198,20 +198,20 @@ fun SettingsScreen(
             ) {
                 SettingsItem(
                     icon = Icons.Default.Info,
-                    title = "Local Wi-Fi IP",
+                    title = "Local Network IP",
                     value = viewModel.discoveryManager.getLocalIp(),
                     accentColor = NeonSky
                 )
                 SettingsItem(
                     icon = Icons.Default.Search,
                     title = "Discovery Port",
-                    value = "UDP 53317 (Auto Broadcast)",
+                    value = "UDP 53317 (Auto Broadcast Beacons)",
                     accentColor = NeonViolet
                 )
                 SettingsItem(
                     icon = Icons.Default.PlayArrow,
                     title = "Streaming Port",
-                    value = "TCP 53318 (Line Rate Streaming)",
+                    value = "TCP 53318 (Direct Socket Streaming)",
                     accentColor = NeonMint
                 )
             }
@@ -256,7 +256,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "SpeedShare v1.0.0",
+                            text = "SpeedShare v1.1.0",
                             color = TextPureWhite,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
@@ -270,7 +270,7 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Ultra-fast, zero-cloud peer-to-peer file sharing designed for line-rate transfers across Windows and Android devices on the same Wi-Fi.",
+                    text = "Ultra-fast, zero-cloud peer-to-peer file sharing designed for direct socket transfers across Windows and Android devices on the local network.",
                     color = TextMuted,
                     fontSize = 12.sp,
                     lineHeight = 18.sp

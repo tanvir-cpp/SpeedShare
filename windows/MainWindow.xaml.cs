@@ -341,9 +341,10 @@ namespace SpeedShareWindows
                     TxtTransferTitle.Text = "Transfer Complete!";
                     TxtTransferSubTitle.Text = "All files sent successfully.";
                     TransferProgressBar.Value = 100;
-                    TxtLiveSpeed.Text = "Finished";
-                    TxtLiveBitrate.Text = "100%";
-                    TxtCurrentFile.Text = "Done.";
+                    TxtLiveSpeed.Text = "100%";
+                    TxtLiveBitrate.Text = "Completed";
+                    TxtTransferEta.Text = "Finished";
+                    TxtCurrentFile.Text = "All files transferred.";
                     BtnCancelTransfer.Content = "Close";
                 }
                 else
@@ -352,6 +353,7 @@ namespace SpeedShareWindows
                     TxtTransferSubTitle.Text = error ?? "Transfer could not be completed.";
                     TxtLiveSpeed.Text = "Stopped";
                     TxtLiveBitrate.Text = "";
+                    TxtTransferEta.Text = "Aborted";
                     BtnCancelTransfer.Content = "Close";
                 }
             });
@@ -430,8 +432,9 @@ namespace SpeedShareWindows
                     TxtTransferTitle.Text = "Transfer Complete!";
                     TxtTransferSubTitle.Text = $"Files saved to {_transferServer.DownloadFolder}";
                     TransferProgressBar.Value = 100;
-                    TxtLiveSpeed.Text = "Saved";
-                    TxtLiveBitrate.Text = "100%";
+                    TxtLiveSpeed.Text = "100%";
+                    TxtLiveBitrate.Text = "Saved";
+                    TxtTransferEta.Text = "Finished";
                     TxtCurrentFile.Text = "Ready in Downloads/SpeedShare";
                     BtnCancelTransfer.Content = "Open Folder & Close";
                 }
@@ -441,6 +444,7 @@ namespace SpeedShareWindows
                     TxtTransferSubTitle.Text = error ?? "Transfer was interrupted.";
                     TxtLiveSpeed.Text = "Stopped";
                     TxtLiveBitrate.Text = "";
+                    TxtTransferEta.Text = "Aborted";
                     BtnCancelTransfer.Content = "Close";
                 }
             });

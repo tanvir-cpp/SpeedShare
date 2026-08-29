@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -87,7 +88,8 @@ namespace SpeedShareWindows.Network
             _cleanupTimer.Start();
 
             _ = Task.Run(() => ListenLoopAsync(_cts.Token));
-            _ = BroadcastBeaconAsync(); // Send immediate initial beacon
+            _ = BroadcastDiscoverAsync(); // Send immediate initial discover ping
+            _ = BroadcastBeaconAsync();   // Send immediate initial beacon
         }
 
         public void Stop()
@@ -112,35 +114,45 @@ namespace SpeedShareWindows.Network
                     var rawJson = Encoding.UTF8.GetString(result.Buffer);
 
                     var beacon = JsonSerializer.Deserialize<BeaconMessage>(rawJson);
-                    if (beacon != null && !string.IsNullOrEmpty(beacon.DeviceId) && beacon.DeviceId != _deviceId)
+                    if (beacon != null && beacon.DeviceId != _deviceId)
                     {
-                        var senderIp = result.RemoteEndPoint.Address.ToString();
-                        // Normalize localhost / IPv6 mapping if any
-                        if (senderIp.StartsWith("::ffff:")) senderIp = senderIp[7..];
-
-                        var peer = new DiscoveredPeer
+                        if (beacon.Type == "DISCOVER")
                         {
-                            DeviceId = beacon.DeviceId,
-                            DeviceName = beacon.DeviceName,
-                            DeviceType = beacon.DeviceType,
-                            IpAddress = senderIp,
-                            Port = beacon.Port > 0 ? beacon.Port : DefaultTransferPort,
-                            LastSeen = DateTime.UtcNow
-                        };
-
-                        bool isNew = !_peers.ContainsKey(peer.DeviceId);
-                        _peers[peer.DeviceId] = peer;
-
-                        if (isNew)
-                        {
-                            PeerFound?.Invoke(peer);
-                        }
-                        else
-                        {
-                            PeerUpdated?.Invoke(peer);
+                            // Respond immediately with beacon so peer discovers us instantly
+                            _ = BroadcastBeaconAsync();
+                            continue;
                         }
 
-                        PeerListChanged?.Invoke(_peers.Values.ToList());
+                        if (beacon.Type == "BEACON" && !string.IsNullOrEmpty(beacon.DeviceId))
+                        {
+                            var senderIp = result.RemoteEndPoint.Address.ToString();
+                            // Normalize localhost / IPv6 mapping if any
+                            if (senderIp.StartsWith("::ffff:")) senderIp = senderIp[7..];
+
+                            var peer = new DiscoveredPeer
+                            {
+                                DeviceId = beacon.DeviceId,
+                                DeviceName = beacon.DeviceName,
+                                DeviceType = beacon.DeviceType,
+                                IpAddress = senderIp,
+                                Port = beacon.Port > 0 ? beacon.Port : DefaultTransferPort,
+                                LastSeen = DateTime.UtcNow
+                            };
+
+                            bool isNew = !_peers.ContainsKey(peer.DeviceId);
+                            _peers[peer.DeviceId] = peer;
+
+                            if (isNew)
+                            {
+                                PeerFound?.Invoke(peer);
+                            }
+                            else
+                            {
+                                PeerUpdated?.Invoke(peer);
+                            }
+
+                            PeerListChanged?.Invoke(_peers.Values.ToList());
+                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -151,6 +163,33 @@ namespace SpeedShareWindows.Network
                 {
                     System.Diagnostics.Debug.WriteLine($"[Discovery] Listen error: {ex.Message}");
                 }
+            }
+        }
+
+        public async Task BroadcastDiscoverAsync()
+        {
+            if (_udpSender == null) return;
+
+            try
+            {
+                var discover = new BeaconMessage
+                {
+                    Type = "DISCOVER",
+                    DeviceId = _deviceId,
+                    DeviceName = _deviceName,
+                    DeviceType = "WINDOWS",
+                    Port = _transferPort,
+                    Version = 1
+                };
+
+                var json = JsonSerializer.Serialize(discover);
+                var bytes = Encoding.UTF8.GetBytes(json);
+
+                await SendToAllBroadcastAddressesAsync(bytes);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Discovery] Discover broadcast error: {ex.Message}");
             }
         }
 
@@ -173,14 +212,70 @@ namespace SpeedShareWindows.Network
                 var json = JsonSerializer.Serialize(beacon);
                 var bytes = Encoding.UTF8.GetBytes(json);
 
-                // Broadcast to standard IPv4 broadcast address
-                var broadcastEndpoint = new IPEndPoint(IPAddress.Broadcast, DiscoveryPort);
-                await _udpSender.SendAsync(bytes, bytes.Length, broadcastEndpoint);
+                await SendToAllBroadcastAddressesAsync(bytes);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Discovery] Broadcast error: {ex.Message}");
             }
+        }
+
+        private async Task SendToAllBroadcastAddressesAsync(byte[] bytes)
+        {
+            if (_udpSender == null) return;
+
+            // 1. Global standard broadcast
+            try
+            {
+                var broadcastEndpoint = new IPEndPoint(IPAddress.Broadcast, DiscoveryPort);
+                await _udpSender.SendAsync(bytes, bytes.Length, broadcastEndpoint);
+            }
+            catch { }
+
+            // 2. Broadcast to each physical network adapter subnet (Wi-Fi, Ethernet)
+            foreach (var bcastIp in GetSubnetBroadcastAddresses())
+            {
+                try
+                {
+                    await _udpSender.SendAsync(bytes, bytes.Length, new IPEndPoint(bcastIp, DiscoveryPort));
+                }
+                catch { }
+            }
+        }
+
+        private static List<IPAddress> GetSubnetBroadcastAddresses()
+        {
+            var broadcastList = new List<IPAddress>();
+            try
+            {
+                foreach (var netInterface in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (netInterface.OperationalStatus != OperationalStatus.Up || 
+                        netInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                        continue;
+
+                    var ipProps = netInterface.GetIPProperties();
+                    foreach (var u in ipProps.UnicastAddresses)
+                    {
+                        if (u.Address.AddressFamily == AddressFamily.InterNetwork && u.IPv4Mask != null)
+                        {
+                            var ipBytes = u.Address.GetAddressBytes();
+                            var maskBytes = u.IPv4Mask.GetAddressBytes();
+                            if (ipBytes.Length == 4 && maskBytes.Length == 4)
+                            {
+                                var bcastBytes = new byte[4];
+                                for (int i = 0; i < 4; i++)
+                                {
+                                    bcastBytes[i] = (byte)(ipBytes[i] | (maskBytes[i] ^ 255));
+                                }
+                                broadcastList.Add(new IPAddress(bcastBytes));
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return broadcastList;
         }
 
         private void CleanupStalePeers()

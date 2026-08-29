@@ -185,7 +185,7 @@ fun RadarHero(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Wi-Fi IP: $localIp • 10 Gbps Ready",
+                text = "Wi-Fi IP: $localIp • Local P2P Ready",
                 color = TextMuted,
                 fontSize = 11.sp
             )

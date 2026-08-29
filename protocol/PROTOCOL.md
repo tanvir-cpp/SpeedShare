@@ -1,7 +1,7 @@
 # SpeedShare High-Speed Local Sharing Protocol Specification
 
 ## 1. Network Discovery (UDP Port: 53317)
-- **Transport**: UDP Broadcast (`255.255.255.255`) and Multicast (`239.255.53.17`)
+- **Transport**: UDP Multi-Adapter Subnet Broadcast & Global Broadcast (`255.255.255.255:53317`)
 - **Heartbeat Interval**: 1.5 seconds
 - **Message Format** (JSON):
 ```json

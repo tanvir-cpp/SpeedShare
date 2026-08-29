@@ -36,7 +36,7 @@ fun QuickCategoryDeck(
             CategoryTile(
                 title = "Photos",
                 subtitle = "JPG, PNG, RAW",
-                icon = Icons.Default.Face,
+                icon = Icons.Default.AccountBox,
                 accentColor = NeonCyan,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("image/*") }
@@ -58,7 +58,7 @@ fun QuickCategoryDeck(
             CategoryTile(
                 title = "Music / Audio",
                 subtitle = "MP3, FLAC, WAV",
-                icon = Icons.Default.Notifications,
+                icon = Icons.Default.Star,
                 accentColor = NeonMint,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("audio/*") }
@@ -66,7 +66,7 @@ fun QuickCategoryDeck(
             CategoryTile(
                 title = "All Files",
                 subtitle = "Docs, ZIP, APK",
-                icon = Icons.Default.Add,
+                icon = Icons.Default.List,
                 accentColor = NeonIndigo,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("*/*") }

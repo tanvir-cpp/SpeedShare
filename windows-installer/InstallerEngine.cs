@@ -9,7 +9,7 @@ namespace SpeedShareSetup
     public static class InstallerEngine
     {
         public const string AppName = "SpeedShare";
-        public const string AppVersion = "1.0.0";
+        public const string AppVersion = "1.1.0";
         public const string Publisher = "SpeedShare Team";
         public const string RegistryKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\SpeedShare";
 

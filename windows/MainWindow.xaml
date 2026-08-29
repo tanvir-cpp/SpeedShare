@@ -101,8 +101,8 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- File Category Badge -->
-                    <Border Grid.Column="0" Background="#1E1B4B" CornerRadius="6" Padding="6,2" Margin="0,0,10,0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding FileCategory}" Foreground="{StaticResource NeonCyan}" FontSize="10" FontWeight="Bold"/>
+                    <Border Grid.Column="0" Background="{Binding CategoryColor}" CornerRadius="6" Padding="6,2" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding FileCategory}" Foreground="#FFFFFF" FontSize="10" FontWeight="Bold"/>
                     </Border>
 
                     <!-- File Info -->
@@ -151,7 +151,7 @@
                                 <TextBlock Text="Speed" Foreground="{StaticResource TextPureWhite}" FontWeight="Bold" FontSize="19"/>
                                 <TextBlock Text="Share" Foreground="{StaticResource NeonCyan}" FontWeight="Bold" FontSize="19"/>
                                 <Border Background="#1E1B4B" CornerRadius="6" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center" BorderBrush="#3730A3" BorderThickness="1">
-                                    <TextBlock Text="Wi-Fi 6 / 10 Gbps" Foreground="{StaticResource NeonMint}" FontSize="9" FontWeight="Bold"/>
+                                    <TextBlock Text="Ultra-Fast LAN" Foreground="{StaticResource NeonMint}" FontSize="9" FontWeight="Bold"/>
                                 </Border>
                             </StackPanel>
                             <TextBlock x:Name="LocalInfoText" Text="Initializing..." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,2,0,0"/>

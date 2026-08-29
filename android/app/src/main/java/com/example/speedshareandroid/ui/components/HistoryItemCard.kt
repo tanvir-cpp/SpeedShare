@@ -212,12 +212,12 @@ fun HistoryItemCard(
 private fun getCategoryMeta(category: String): Pair<ImageVector, Color> {
     return when (category) {
         "VIDEO" -> Pair(Icons.Default.PlayArrow, NeonViolet)
-        "IMAGE" -> Pair(Icons.Default.Face, NeonCyan)
-        "AUDIO" -> Pair(Icons.Default.Notifications, NeonMint)
-        "ARCHIVE" -> Pair(Icons.Default.ShoppingCart, NeonAmber)
+        "IMAGE" -> Pair(Icons.Default.AccountBox, NeonCyan)
+        "AUDIO" -> Pair(Icons.Default.Star, NeonMint)
+        "ARCHIVE" -> Pair(Icons.Default.Build, NeonAmber)
         "DOCUMENT" -> Pair(Icons.Default.Edit, NeonSky)
         "APP" -> Pair(Icons.Default.Phone, NeonIndigo)
-        "CODE" -> Pair(Icons.Default.Info, NeonEmerald)
-        else -> Pair(Icons.Default.Menu, TextSecondary)
+        "CODE" -> Pair(Icons.Default.Build, NeonEmerald)
+        else -> Pair(Icons.Default.List, TextSecondary)
     }
 }

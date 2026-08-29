@@ -17,6 +17,8 @@ namespace SpeedShareWindows.Models
         public bool IsAndroid => string.Equals(DeviceType, "ANDROID", StringComparison.OrdinalIgnoreCase);
         public string DisplayType => IsAndroid ? "Android" : "Windows";
         public string DisplayBadge => IsAndroid ? "Android Device" : "Windows PC";
+        public string PlatformDisplay => IsAndroid ? "Android Device" : "Windows PC";
+        public string PlatformIcon => IsAndroid ? "📱" : "💻";
     }
 
     public class BeaconMessage
@@ -167,13 +169,17 @@ namespace SpeedShareWindows.Models
         {
             get
             {
-                if (EstimatedTimeRemaining.TotalSeconds <= 0 || double.IsInfinity(EstimatedTimeRemaining.TotalSeconds))
+                if (double.IsNaN(EstimatedTimeRemaining.TotalSeconds) || 
+                    double.IsInfinity(EstimatedTimeRemaining.TotalSeconds) || 
+                    EstimatedTimeRemaining.TotalSeconds <= 0)
                     return "Calculating...";
+                if (EstimatedTimeRemaining.TotalHours >= 24)
+                    return "> 24h";
                 if (EstimatedTimeRemaining.TotalHours >= 1)
                     return $"{(int)EstimatedTimeRemaining.TotalHours}h {EstimatedTimeRemaining.Minutes}m";
                 if (EstimatedTimeRemaining.TotalMinutes >= 1)
                     return $"{EstimatedTimeRemaining.Minutes}m {EstimatedTimeRemaining.Seconds}s";
-                return $"{EstimatedTimeRemaining.Seconds}s";
+                return $"{Math.Max(1, EstimatedTimeRemaining.Seconds)}s";
             }
         }
     }

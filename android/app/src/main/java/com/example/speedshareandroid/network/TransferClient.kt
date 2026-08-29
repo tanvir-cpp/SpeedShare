@@ -55,6 +55,12 @@ class TransferClient(
         activeSocket = socket
         var averageSpeed = 0.0
 
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SpeedShare:TransferClientWakeLock")?.apply {
+            setReferenceCounted(false)
+            acquire(15 * 60 * 1000L)
+        }
+
         try {
             socket.tcpNoDelay = true
             socket.sendBufferSize = 2 * 1024 * 1024
@@ -132,6 +138,7 @@ class TransferClient(
 
             for (i in files.indices) {
                 val fileItem = files[i]
+                val fileStartTime = System.currentTimeMillis()
 
                 // Write file index (4 bytes) & file size (8 bytes)
                 outputStream.writeInt(i)
@@ -189,7 +196,10 @@ class TransferClient(
                     try { inStream?.close() } catch (e: Exception) {}
                 }
 
-                // Add record to history
+                val fileDurationSec = (System.currentTimeMillis() - fileStartTime) / 1000.0
+                val fileAverageSpeed = if (fileDurationSec > 0) fileItem.size / fileDurationSec else averageSpeed
+
+                // Add record to history with true average speed
                 historyRepository.addRecord(
                     TransferRecord(
                         fileName = fileItem.name,
@@ -199,7 +209,7 @@ class TransferClient(
                         status = TransferStatus.COMPLETED,
                         peerName = targetPeer.deviceName,
                         peerIp = targetPeer.ipAddress,
-                        speedBytesPerSec = averageSpeed
+                        speedBytesPerSec = fileAverageSpeed
                     )
                 )
             }
@@ -229,6 +239,9 @@ class TransferClient(
 
             _transferResultFlow.emit(Pair(false, e.message ?: "Transfer error"))
         } finally {
+            try {
+                if (wakeLock?.isHeld == true) wakeLock.release()
+            } catch (e: Exception) {}
             try { socket.close() } catch (e: Exception) {}
             activeSocket = null
         }
