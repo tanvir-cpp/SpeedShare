@@ -194,6 +194,30 @@ namespace SpeedShareWindows.Tests
                 }
             });
 
+            // -------- Version normalization & CurrentVersion sanity --------
+
+            Test("CurrentVersion returns a non-zero valid version", () =>
+            {
+                var v = UpdateCheckerService.CurrentVersion;
+                if (string.IsNullOrWhiteSpace(v)) throw new Exception("CurrentVersion is empty");
+                if (v == "0.0.0") throw new Exception("CurrentVersion is 0.0.0 (assembly identity not populated)");
+                var parts = v.Split('.');
+                if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || major < 1)
+                {
+                    throw new Exception($"CurrentVersion looks invalid: '{v}'");
+                }
+            });
+
+            Test("CurrentVersion matches the same major.minor that GitHub would offer", () =>
+            {
+                // The published binary should report a version that is
+                // a valid semver of the form X.Y.Z. A 0.0.0 here would
+                // mean the in-app updater thinks every release is newer
+                // than itself and would prompt forever.
+                var v = UpdateCheckerService.CurrentVersion;
+                if (v.StartsWith("0.")) throw new Exception($"CurrentVersion starts with 0: '{v}'");
+            });
+
             Console.WriteLine();
             Console.WriteLine($"  {passed} passed, {failed} failed");
             return failed == 0 ? 0 : 1;

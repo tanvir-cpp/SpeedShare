@@ -9,10 +9,15 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <!-- We maintain our own AssemblyInfo.cs with full metadata for
-         SmartScreen / Windows Defender. Disable the SDK's
-         auto-generation to avoid duplicate-attribute compile errors. -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!--
+      GenerateAssemblyInfo is LEFT AT ITS DEFAULT (true) so the SDK
+      auto-generates AssemblyInfo.cs with the version attributes from
+      Directory.Build.props AND stamps the Win32 VERSIONINFO resource
+      with the same values. Without this, single-file publish produces
+      an .exe with FileVersion=0.0.0.0 and the in-app update checker
+      reads CurrentVersion as 0.0.0, which causes it to think every
+      release is newer than itself.
+    -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 

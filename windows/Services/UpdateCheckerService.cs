@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -46,18 +47,95 @@ namespace SpeedShareWindows.Services
         public const string GitHubApiUrl = "https://api.github.com/repos/tanvir-cpp/SpeedShare/releases/latest";
         public const string ReleasesWebUrl = "https://github.com/tanvir-cpp/SpeedShare/releases/latest";
 
+        /// <summary>
+        /// Determine the current app version at runtime. Tries four
+        /// sources in order of reliability:
+        ///   1. InformationalVersion (set from &lt;Version&gt; in Directory.Build.props)
+        ///   2. FileVersion from the Win32 VERSIONINFO resource
+        ///   3. AssemblyVersion (set from &lt;AssemblyVersion&gt;)
+        ///   4. Entry-process executable path's FileVersion
+        /// Single-file published .NET apps can occasionally report
+        /// 0.0.0.0 via Assembly.GetName() because the bundle is loaded
+        /// from a memory stream rather than a file. Falling through to
+        /// the file system version avoids the "always thinks there's an
+        /// update" bug.
+        /// </summary>
         private static string GetCurrentVersion()
         {
+            var assembly = typeof(UpdateCheckerService).Assembly;
             try
             {
-                var v = typeof(UpdateCheckerService).Assembly.GetName().Version;
+                var info = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
+                if (info != null && !string.IsNullOrWhiteSpace(info.InformationalVersion))
+                {
+                    var v = info.InformationalVersion.Split('+')[0].Trim(); // strip commit hash if present
+                    if (IsValidVersion(v)) return NormalizeVersion(v);
+                }
+            }
+            catch { }
+            try
+            {
+                // For single-file apps, Assembly.Location is empty.
+                // We try it anyway because in framework-dependent builds
+                // it does return the dll path, which has the version.
+#pragma warning disable IL3000
+                var location = assembly.Location;
+#pragma warning restore IL3000
+                if (!string.IsNullOrEmpty(location) && System.IO.File.Exists(location))
+                {
+                    var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(location);
+                    if (IsValidVersion(fvi.FileVersion) && fvi.FileVersion != null)
+                        return NormalizeVersion(fvi.FileVersion);
+                }
+            }
+            catch { }
+            try
+            {
+                var v = assembly.GetName().Version;
                 if (v != null && (v.Major > 0 || v.Minor > 0 || v.Build > 0))
                 {
                     return $"{v.Major}.{v.Minor}.{v.Build}";
                 }
             }
             catch { }
+            // Last resort: read the entry process's exe version
+            try
+            {
+                var entry = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrEmpty(entry) && System.IO.File.Exists(entry))
+                {
+                    var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(entry);
+                    if (IsValidVersion(fvi.FileVersion) && fvi.FileVersion != null)
+                        return NormalizeVersion(fvi.FileVersion);
+                }
+            }
+            catch { }
             return "0.0.0";
+        }
+
+        private static bool IsValidVersion(string? v)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return false;
+            var trimmed = v.Trim();
+            if (trimmed == "0.0.0.0" || trimmed == "0.0.0") return false;
+            // Must contain at least one digit and a dot
+            return trimmed.Contains('.') && trimmed.Any(char.IsDigit);
+        }
+
+        private static string NormalizeVersion(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return "0.0.0";
+            // Strip any suffix like "-rc1" or "+abc123" — the in-app
+            // version comparison only cares about the numeric part.
+            var t = v.Trim();
+            var plus = t.IndexOf('+');
+            if (plus > 0) t = t.Substring(0, plus);
+            var dash = t.IndexOf('-');
+            if (dash > 0) t = t.Substring(0, dash);
+            // Take only the first three numeric parts (Major.Minor.Build)
+            var parts = t.Split('.');
+            if (parts.Length >= 3) return $"{parts[0]}.{parts[1]}.{parts[2]}";
+            return t;
         }
 
         private static readonly HttpClient _httpClient = new()

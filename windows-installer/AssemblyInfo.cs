@@ -1,15 +1,8 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 
-[assembly: AssemblyTitle("SpeedShare Setup")]
-[assembly: AssemblyDescription("Installer for SpeedShare")]
-[assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("SpeedShare")]
-[assembly: AssemblyProduct("SpeedShare")]
-[assembly: AssemblyCopyright("Copyright © 2026 SpeedShare")]
-[assembly: AssemblyTrademark("")]
-[assembly: AssemblyCulture("")]
+// Only WPF-specific attributes live here. See windows/AssemblyInfo.cs
+// for the rationale.
 
 [assembly: ComVisible(false)]
 [assembly: ThemeInfo(
