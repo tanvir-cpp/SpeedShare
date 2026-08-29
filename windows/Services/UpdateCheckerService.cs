@@ -23,9 +23,23 @@ namespace SpeedShareWindows.Services
 
     public class UpdateCheckerService
     {
-        public const string CurrentVersion = "1.1.0";
+        public static readonly string CurrentVersion = GetCurrentVersion();
         public const string GitHubApiUrl = "https://api.github.com/repos/tanvir-cpp/SpeedShare/releases/latest";
         public const string ReleasesWebUrl = "https://github.com/tanvir-cpp/SpeedShare/releases/latest";
+
+        private static string GetCurrentVersion()
+        {
+            try
+            {
+                var v = typeof(UpdateCheckerService).Assembly.GetName().Version;
+                if (v != null && (v.Major > 0 || v.Minor > 0 || v.Build > 0))
+                {
+                    return $"{v.Major}.{v.Minor}.{v.Build}";
+                }
+            }
+            catch { }
+            return "0.0.0";
+        }
 
         private static readonly HttpClient _httpClient = new()
         {
@@ -65,15 +79,27 @@ namespace SpeedShareWindows.Services
 
                     if (release.Assets != null)
                     {
+                        // First pass: prefer SpeedShare-Setup.exe
                         foreach (var asset in release.Assets)
                         {
-                            if (asset.Name != null && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                            if (asset.Name != null &&
+                                asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                                asset.Name.Contains("Setup", StringComparison.OrdinalIgnoreCase))
                             {
                                 installerUrl = asset.BrowserDownloadUrl;
                                 installerSize = asset.Size;
-                                // Prefer SpeedShare-Setup.exe
-                                if (asset.Name.Contains("Setup", StringComparison.OrdinalIgnoreCase))
+                                break;
+                            }
+                        }
+                        // Second pass: any .exe
+                        if (installerUrl == null)
+                        {
+                            foreach (var asset in release.Assets)
+                            {
+                                if (asset.Name != null && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                                 {
+                                    installerUrl = asset.BrowserDownloadUrl;
+                                    installerSize = asset.Size;
                                     break;
                                 }
                             }
@@ -115,7 +141,26 @@ namespace SpeedShareWindows.Services
         {
             var tempPath = Path.Combine(Path.GetTempPath(), "SpeedShare-Setup-Update.exe");
 
-            using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            // Follow redirects manually up to 5 hops
+            string url = downloadUrl;
+            HttpResponseMessage? response = null;
+            for (int redirect = 0; redirect < 5; redirect++)
+            {
+                var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.UserAgent.ParseAdd($"SpeedShare-Windows/{CurrentVersion}");
+                response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                if ((int)response.StatusCode is 301 or 302 or 303 or 307 or 308)
+                {
+                    var loc = response.Headers.Location?.ToString();
+                    response.Dispose();
+                    if (string.IsNullOrEmpty(loc)) throw new HttpRequestException("Redirect without Location header");
+                    url = loc;
+                    continue;
+                }
+                break;
+            }
+
+            if (response == null) throw new HttpRequestException("No response received.");
             response.EnsureSuccessStatusCode();
 
             var totalBytes = response.Content.Headers.ContentLength ?? -1L;
@@ -142,16 +187,33 @@ namespace SpeedShareWindows.Services
 
         public static void LaunchInstallerAndExit(string installerPath)
         {
-            Process.Start(new ProcessStartInfo
+            try
             {
-                FileName = installerPath,
-                UseShellExecute = true
-            });
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = installerPath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[UpdateChecker] Failed to launch installer: {ex.Message}");
+                return;
+            }
 
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            // Schedule shutdown on the UI thread if we can; otherwise just exit.
+            try
             {
-                System.Windows.Application.Current.Shutdown();
-            });
+                var app = System.Windows.Application.Current;
+                if (app != null)
+                {
+                    app.Dispatcher.BeginInvoke(new Action(() => app.Shutdown()));
+                }
+            }
+            catch
+            {
+                // best-effort
+            }
         }
 
         private class GitHubReleaseResponse

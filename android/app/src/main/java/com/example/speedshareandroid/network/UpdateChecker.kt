@@ -110,32 +110,41 @@ object UpdateChecker {
         onProgress: (Float) -> Unit
     ): File? = withContext(Dispatchers.IO) {
         try {
-            val url = URL(downloadUrl)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 15000
-                readTimeout = 30000
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "SpeedShare-Android-Updater")
-            }
-
-            // Follow redirect if needed
-            var redirectConn = conn
-            var code = redirectConn.responseCode
-            if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP || code == 307 || code == 308) {
-                val redirectUrl = redirectConn.getHeaderField("Location")
-                redirectConn = (URL(redirectUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                    setRequestProperty("User-Agent", "SpeedShare-Android-Updater")
-                }
-            }
-
-            val totalBytes = redirectConn.contentLengthLong
             val targetFile = File(context.cacheDir, "SpeedShare-Update.apk")
             if (targetFile.exists()) targetFile.delete()
 
-            redirectConn.inputStream.use { inStream ->
+            // Follow redirects manually (HttpURLConnection doesn't always follow them
+            // for binary downloads, and we want to be explicit).
+            var url = downloadUrl
+            var conn: HttpURLConnection? = null
+            var redirects = 0
+            while (redirects < 5) {
+                val connCandidate = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 30000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "SpeedShare-Android-Updater")
+                    setRequestProperty("Accept", "application/octet-stream")
+                }
+                val code = connCandidate.responseCode
+                if (code == HttpURLConnection.HTTP_MOVED_PERM ||
+                    code == HttpURLConnection.HTTP_MOVED_TEMP ||
+                    code == 307 || code == 308) {
+                    connCandidate.disconnect()
+                    val next = connCandidate.getHeaderField("Location") ?: break
+                    url = next
+                    redirects++
+                    continue
+                }
+                conn = connCandidate
+                break
+            }
+
+            if (conn == null) return@withContext null
+
+            val totalBytes = conn.contentLengthLong
+            conn.inputStream.use { inStream ->
                 FileOutputStream(targetFile).use { outStream ->
                     val buffer = ByteArray(65536)
                     var bytesRead: Int
@@ -152,6 +161,7 @@ object UpdateChecker {
                     outStream.flush()
                 }
             }
+            conn.disconnect()
 
             return@withContext targetFile
         } catch (e: Exception) {
@@ -160,8 +170,9 @@ object UpdateChecker {
         }
     }
 
-    fun launchApkInstaller(context: Context, apkFile: File) {
-        try {
+    fun launchApkInstaller(context: Context, apkFile: File): Boolean {
+        return try {
+            if (!apkFile.exists()) return false
             val authority = "${context.packageName}.fileprovider"
             val uri: Uri = FileProvider.getUriForFile(context, authority, apkFile)
 
@@ -170,8 +181,10 @@ object UpdateChecker {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
             context.startActivity(intent)
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch installer intent: ${e.message}")
+            false
         }
     }
 }

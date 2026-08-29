@@ -199,7 +199,7 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.Info,
                     title = "Local Network IP",
-                    value = viewModel.discoveryManager.getLocalIp(),
+                    value = viewModel.localIp,
                     accentColor = NeonSky
                 )
                 SettingsItem(
@@ -256,7 +256,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "SpeedShare v1.1.0",
+                            text = "SpeedShare v${viewModel.currentAppVersion}",
                             color = TextPureWhite,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp

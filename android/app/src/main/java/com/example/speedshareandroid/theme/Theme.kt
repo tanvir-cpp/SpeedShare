@@ -37,7 +37,9 @@ fun SpeedShareAndroidTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
+            @Suppress("DEPRECATION")
             window.statusBarColor = BgMidnight.toArgb()
+            @Suppress("DEPRECATION")
             window.navigationBarColor = BgMidnight.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false

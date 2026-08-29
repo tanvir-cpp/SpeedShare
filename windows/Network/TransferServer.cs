@@ -27,10 +27,12 @@ namespace SpeedShareWindows.Network
     {
         public const int DefaultPort = 53318;
         private const int ChunkSize = 1024 * 1024; // 1 MB buffer for maximum speed
+        private const int MaxConcurrentClients = 8;
 
         private TcpListener? _listener;
         private CancellationTokenSource? _cts;
         private string _downloadFolder;
+        private readonly SemaphoreSlim _clientGate = new(MaxConcurrentClients, MaxConcurrentClients);
 
         public event EventHandler<IncomingTransferRequestArgs>? TransferRequestReceived;
         public event Action<TransferProgressReport>? ProgressChanged;
@@ -67,8 +69,6 @@ namespace SpeedShareWindows.Network
             _cts = new CancellationTokenSource();
             _listener = new TcpListener(IPAddress.Any, port);
             _listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            _listener.Server.ReceiveBufferSize = 2 * 1024 * 1024; // 2MB receive buffer
-            _listener.Server.NoDelay = true;
             _listener.Start();
 
             _ = Task.Run(() => AcceptLoopAsync(_cts.Token));
@@ -90,8 +90,27 @@ namespace SpeedShareWindows.Network
                 {
                     var client = await _listener.AcceptTcpClientAsync(token);
                     client.NoDelay = true;
-                    client.ReceiveBufferSize = 2 * 1024 * 1024;
-                    _ = Task.Run(() => HandleClientAsync(client, token), token);
+                    try
+                    {
+                        client.Client.ReceiveBufferSize = 2 * 1024 * 1024;
+                        client.Client.SendBufferSize = 2 * 1024 * 1024;
+                    }
+                    catch { /* best-effort */ }
+
+                    // Bound concurrency so a flood of incoming connections can't
+                    // pin the device.
+                    await _clientGate.WaitAsync(token);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await HandleClientAsync(client, token);
+                        }
+                        finally
+                        {
+                            _clientGate.Release();
+                        }
+                    }, token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -130,11 +149,24 @@ namespace SpeedShareWindows.Network
 
                     if (request == null || request.Action != "TRANSFER_REQUEST" || request.Files == null || request.Files.Count == 0)
                     {
+                        // Send a structured decline so the sender doesn't hang.
+                        var emptyDecline = new ControlMessage
+                        {
+                            Action = "TRANSFER_DECLINE",
+                            SessionId = request?.SessionId ?? string.Empty,
+                            Reason = "Invalid transfer request"
+                        };
+                        try
+                        {
+                            await SendControlMessageAsync(stream, emptyDecline, token);
+                        }
+                        catch { }
                         throw new InvalidDataException("Invalid transfer request");
                     }
 
                     sessionId = request.SessionId;
                     var senderIp = ((IPEndPoint?)client.Client.RemoteEndPoint)?.Address.ToString() ?? "";
+                    if (senderIp.StartsWith("::ffff:")) senderIp = senderIp[7..];
 
                     // 3. Prompt user for approval
                     var requestArgs = new IncomingTransferRequestArgs
@@ -150,7 +182,11 @@ namespace SpeedShareWindows.Network
                     TransferRequestReceived?.Invoke(this, requestArgs);
 
                     // Wait for user decision
-                    bool accepted = await requestArgs.DecisionTcs.Task;
+                    bool accepted;
+                    using (token.Register(() => requestArgs.DecisionTcs.TrySetCanceled()))
+                    {
+                        accepted = await requestArgs.DecisionTcs.Task;
+                    }
 
                     if (!accepted)
                     {
@@ -192,61 +228,79 @@ namespace SpeedShareWindows.Network
                         int fileIndex = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(metaBuf, 0));
                         long fileSize = IPAddress.NetworkToHostOrder(BitConverter.ToInt64(metaBuf, 4));
 
-                        // Generate unique target path if file already exists
-                        string safeFileName = Path.GetFileName(fileMeta.Name);
-                        string destinationPath = GetUniqueFilePath(_downloadFolder, safeFileName);
-
-                        using (var fileStream = new FileStream(
-                            destinationPath, 
-                            FileMode.Create, 
-                            FileAccess.Write, 
-                            FileShare.None, 
-                            bufferSize: ChunkSize, 
-                            useAsync: true))
+                        if (fileIndex != i)
                         {
-                            long remainingForFile = fileSize;
-                            while (remainingForFile > 0)
+                            Debug.WriteLine($"[TransferServer] Unexpected file index {fileIndex} (expected {i})");
+                        }
+
+                        // Preserve relative folder structure if present
+                        string safeRelative = SanitizeRelativePath(fileMeta.Name);
+                        string destinationPath = GetUniqueFilePath(_downloadFolder, safeRelative);
+
+                        if (fileSize == 0)
+                        {
+                            // Create an empty file (and any missing parent dirs)
+                            var dir = Path.GetDirectoryName(destinationPath);
+                            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                            File.WriteAllBytes(destinationPath, Array.Empty<byte>());
+                        }
+                        else
+                        {
+                            var dir = Path.GetDirectoryName(destinationPath);
+                            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                            using (var fileStream = new FileStream(
+                                destinationPath,
+                                FileMode.Create,
+                                FileAccess.Write,
+                                FileShare.None,
+                                bufferSize: ChunkSize,
+                                useAsync: true))
                             {
-                                int toRead = (int)Math.Min(ChunkSize, remainingForFile);
-                                int bytesRead = await stream.ReadAsync(buffer.AsMemory(0, toRead), token);
-                                if (bytesRead == 0)
+                                long remainingForFile = fileSize;
+                                while (remainingForFile > 0)
                                 {
-                                    throw new EndOfStreamException("Connection terminated before transfer completed.");
-                                }
-
-                                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
-                                remainingForFile -= bytesRead;
-                                totalBytesTransferred += bytesRead;
-
-                                // Progress calculation every 200ms
-                                long now = stopwatch.ElapsedMilliseconds;
-                                if (now - lastReportTime >= 200 || totalBytesTransferred == totalBytes)
-                                {
-                                    double deltaSec = (now - lastReportTime) / 1000.0;
-                                    double speed = deltaSec > 0 ? (totalBytesTransferred - lastReportBytes) / deltaSec : 0;
-                                    double overallSpeed = stopwatch.Elapsed.TotalSeconds > 0 ? totalBytesTransferred / stopwatch.Elapsed.TotalSeconds : 0;
-                                    
-                                    long remainingBytes = Math.Max(0, totalBytes - totalBytesTransferred);
-                                    double etaSeconds = speed > 0 ? remainingBytes / speed : 0;
-
-                                    ProgressChanged?.Invoke(new TransferProgressReport
+                                    int toRead = (int)Math.Min(ChunkSize, remainingForFile);
+                                    int bytesRead = await stream.ReadAsync(buffer.AsMemory(0, toRead), token);
+                                    if (bytesRead == 0)
                                     {
-                                        SessionId = sessionId,
-                                        CurrentFileName = safeFileName,
-                                        CurrentFileIndex = i + 1,
-                                        TotalFiles = request.Files.Count,
-                                        TotalBytesTransferred = totalBytesTransferred,
-                                        TotalBytes = totalBytes,
-                                        Percentage = totalBytes > 0 ? (double)totalBytesTransferred / totalBytes * 100.0 : 100.0,
-                                        SpeedBytesPerSec = speed,
-                                        EstimatedTimeRemaining = TimeSpan.FromSeconds(etaSeconds)
-                                    });
+                                        throw new EndOfStreamException("Connection terminated before transfer completed.");
+                                    }
 
-                                    lastReportBytes = totalBytesTransferred;
-                                    lastReportTime = now;
+                                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
+                                    remainingForFile -= bytesRead;
+                                    totalBytesTransferred += bytesRead;
+
+                                    // Progress calculation every 200ms
+                                    long now = stopwatch.ElapsedMilliseconds;
+                                    if (now - lastReportTime >= 200 || totalBytesTransferred == totalBytes)
+                                    {
+                                        double deltaSec = (now - lastReportTime) / 1000.0;
+                                        double speed = deltaSec > 0 ? (totalBytesTransferred - lastReportBytes) / deltaSec : 0;
+                                        double overallSpeed = stopwatch.Elapsed.TotalSeconds > 0 ? totalBytesTransferred / stopwatch.Elapsed.TotalSeconds : 0;
+
+                                        long remainingBytes = Math.Max(0, totalBytes - totalBytesTransferred);
+                                        double etaSeconds = speed > 0 ? remainingBytes / speed : 0;
+
+                                        ProgressChanged?.Invoke(new TransferProgressReport
+                                        {
+                                            SessionId = sessionId,
+                                            CurrentFileName = Path.GetFileName(safeRelative),
+                                            CurrentFileIndex = i + 1,
+                                            TotalFiles = request.Files.Count,
+                                            TotalBytesTransferred = totalBytesTransferred,
+                                            TotalBytes = totalBytes,
+                                            Percentage = totalBytes > 0 ? (double)totalBytesTransferred / totalBytes * 100.0 : 100.0,
+                                            SpeedBytesPerSec = speed,
+                                            EstimatedTimeRemaining = TimeSpan.FromSeconds(etaSeconds)
+                                        });
+
+                                        lastReportBytes = totalBytesTransferred;
+                                        lastReportTime = now;
+                                    }
                                 }
+                                await fileStream.FlushAsync(token);
                             }
-                            await fileStream.FlushAsync(token);
                         }
                     }
 
@@ -272,18 +326,45 @@ namespace SpeedShareWindows.Network
             }
         }
 
-        private static string GetUniqueFilePath(string folder, string fileName)
+        /// <summary>
+        /// Strips illegal path components from a relative file name sent over the
+        /// wire. Returns just the file name if the input contains anything but a
+        /// simple relative path.
+        /// </summary>
+        private static string SanitizeRelativePath(string name)
         {
-            string path = Path.Combine(folder, fileName);
+            if (string.IsNullOrWhiteSpace(name)) return "file";
+            // Normalize separators, reject parent refs
+            var normalized = name.Replace('\\', '/');
+            if (normalized.Contains("..")) return Path.GetFileName(normalized);
+            // Reject absolute paths
+            if (Path.IsPathRooted(normalized)) return Path.GetFileName(normalized);
+            // Replace any illegal chars with underscore
+            var illegal = Path.GetInvalidFileNameChars();
+            var parts = normalized.Split('/');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                foreach (var c in illegal)
+                {
+                    parts[i] = parts[i].Replace(c, '_');
+                }
+            }
+            return string.Join(Path.DirectorySeparatorChar.ToString(), parts);
+        }
+
+        private static string GetUniqueFilePath(string folder, string relativePath)
+        {
+            string path = Path.Combine(folder, relativePath);
             if (!File.Exists(path)) return path;
 
-            string nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
-            string ext = Path.GetExtension(fileName);
+            string dir = Path.GetDirectoryName(path) ?? folder;
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
             int counter = 1;
 
             while (File.Exists(path))
             {
-                path = Path.Combine(folder, $"{nameWithoutExt} ({counter}){ext}");
+                path = Path.Combine(dir, $"{nameWithoutExt} ({counter}){ext}");
                 counter++;
             }
             return path;

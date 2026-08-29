@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -23,7 +24,8 @@ import com.example.speedshareandroid.theme.*
 
 @Composable
 fun QuickCategoryDeck(
-    onPickCategory: (String) -> Unit
+    onPickCategory: (String) -> Unit,
+    onPickFolder: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -66,10 +68,24 @@ fun QuickCategoryDeck(
             CategoryTile(
                 title = "All Files",
                 subtitle = "Docs, ZIP, APK",
-                icon = Icons.Default.List,
+                icon = Icons.AutoMirrored.Filled.List,
                 accentColor = NeonIndigo,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("*/*") }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CategoryTile(
+                title = "Pick Folder",
+                subtitle = "Add entire directory",
+                icon = Icons.Default.Folder,
+                accentColor = NeonSky,
+                modifier = Modifier.weight(1f),
+                onClick = onPickFolder
             )
         }
     }

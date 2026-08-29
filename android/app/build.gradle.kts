@@ -4,6 +4,13 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
 }
 
+val appVersion: String = file("${rootDir}/../VERSION").readText().trim()
+
+val (versionMajor, versionMinor, versionPatch) = appVersion.split(".").let {
+    Triple(it.getOrNull(0)?.toIntOrNull() ?: 0, it.getOrNull(1)?.toIntOrNull() ?: 0, it.getOrNull(2)?.toIntOrNull() ?: 0)
+}
+val versionCodeValue = versionMajor * 10000 + versionMinor * 100 + versionPatch
+
 android {
     namespace = "com.example.speedshareandroid"
     compileSdk = 36
@@ -11,8 +18,8 @@ android {
         applicationId = "com.example.speedshareandroid"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = versionCodeValue
+        versionName = appVersion
     }
 
     buildTypes {
@@ -30,7 +37,7 @@ android {
     buildFeatures {
       compose = true
       aidl = false
-      buildConfig = false
+      buildConfig = true
       shaders = false
     }
 
@@ -64,6 +71,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
   implementation("androidx.compose.material:material-icons-core")
+  implementation("androidx.compose.material:material-icons-extended")
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

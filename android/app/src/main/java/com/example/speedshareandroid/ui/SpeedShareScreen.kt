@@ -1,5 +1,6 @@
 package com.example.speedshareandroid.ui
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,12 +61,29 @@ fun SpeedShareScreen(
     val updateDownloadProgress by viewModel.updateDownloadProgress.collectAsState()
 
     var activePickerMime by remember { mutableStateOf("*/*") }
+    var showFolderDialog by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             viewModel.addFilesFromUris(context, uris)
+        }
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri: Uri? ->
+        if (treeUri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // Some pickers don't allow persistent permission; that's OK
+            }
+            viewModel.addFilesFromTreeUri(context, treeUri)
         }
     }
 
@@ -110,7 +130,7 @@ fun SpeedShareScreen(
                                 }
                             }
                             Text(
-                                text = "IP: ${viewModel.discoveryManager.getLocalIp()}",
+                                text = "IP: ${viewModel.localIp}",
                                 fontSize = 11.sp,
                                 color = TextMuted
                             )
@@ -176,7 +196,7 @@ fun SpeedShareScreen(
                                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Send,
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
                                         contentDescription = null,
                                         modifier = Modifier.size(15.dp)
                                     )
@@ -218,7 +238,7 @@ fun SpeedShareScreen(
                         selected = currentTab == AppTab.HISTORY,
                         onClick = { viewModel.selectTab(AppTab.HISTORY) },
                         icon = {
-                            Icon(Icons.Default.List, contentDescription = "History")
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History")
                         },
                         label = { Text("History", fontWeight = if (currentTab == AppTab.HISTORY) FontWeight.Bold else FontWeight.Normal) },
                         colors = NavigationBarItemDefaults.colors(
@@ -259,7 +279,7 @@ fun SpeedShareScreen(
                 AppTab.SHARE -> {
                     ShareTabContent(
                         localDeviceName = viewModel.customDeviceName.collectAsState().value,
-                        localIp = viewModel.discoveryManager.getLocalIp(),
+                        localIp = viewModel.localIp,
                         peers = peers,
                         selectedPeer = selectedPeer,
                         selectedFiles = selectedFiles,
@@ -269,6 +289,7 @@ fun SpeedShareScreen(
                             activePickerMime = mime
                             filePickerLauncher.launch(if (mime == "*/*") arrayOf("*/*") else arrayOf(mime))
                         },
+                        onPickFolder = { folderPickerLauncher.launch(null) },
                         onRemoveFile = { f -> viewModel.removeFile(f) },
                         onClearFiles = { viewModel.clearFiles() }
                     )
@@ -540,6 +561,7 @@ fun ShareTabContent(
     onRefresh: () -> Unit,
     onSelectPeer: (DiscoveredPeer) -> Unit,
     onPickCategory: (String) -> Unit,
+    onPickFolder: () -> Unit,
     onRemoveFile: (FileItem) -> Unit,
     onClearFiles: () -> Unit
 ) {
@@ -638,7 +660,10 @@ fun ShareTabContent(
         }
 
         item {
-            QuickCategoryDeck(onPickCategory = onPickCategory)
+            QuickCategoryDeck(
+                onPickCategory = onPickCategory,
+                onPickFolder = onPickFolder
+            )
         }
 
         // Section 3: Selected Files Queue

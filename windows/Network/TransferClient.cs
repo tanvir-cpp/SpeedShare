@@ -42,6 +42,10 @@ namespace SpeedShareWindows.Network
                     f.Size = new FileInfo(f.LocalPath).Length;
                     totalSize += f.Size;
                 }
+                else
+                {
+                    f.Size = 0;
+                }
             }
 
             TcpClient? client = null;
@@ -49,8 +53,6 @@ namespace SpeedShareWindows.Network
             {
                 client = new TcpClient();
                 client.NoDelay = true;
-                client.SendBufferSize = 2 * 1024 * 1024;
-                client.ReceiveBufferSize = 2 * 1024 * 1024;
 
                 // 1. Connect with 5s timeout
                 var connectTask = client.ConnectAsync(targetPeer.IpAddress, targetPeer.Port);
@@ -60,6 +62,16 @@ namespace SpeedShareWindows.Network
                     throw new TimeoutException($"Could not connect to {targetPeer.DeviceName} ({targetPeer.IpAddress}:{targetPeer.Port})");
                 }
                 await connectTask; // Propagate any connect exceptions
+
+                // Set socket buffer sizes on the underlying socket AFTER connect.
+                // Setting them on TcpClient before connect is a hint that the OS
+                // can ignore; setting them on the Socket actually applies.
+                try
+                {
+                    client.Client.SendBufferSize = 2 * 1024 * 1024;
+                    client.Client.ReceiveBufferSize = 2 * 1024 * 1024;
+                }
+                catch { /* best-effort */ }
 
                 var stream = client.GetStream();
 
@@ -107,18 +119,43 @@ namespace SpeedShareWindows.Network
                         throw new FileNotFoundException($"File not found: {file.LocalPath}");
                     }
 
+                    // Refresh size in case the file changed since the UI picked it
+                    long actualSize = new FileInfo(file.LocalPath).Length;
+                    if (actualSize != file.Size)
+                    {
+                        file.Size = actualSize;
+                    }
+
                     // Write 4-byte file index and 8-byte file size
                     var metaBuf = new byte[12];
                     Array.Copy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(i)), 0, metaBuf, 0, 4);
                     Array.Copy(BitConverter.GetBytes(IPAddress.HostToNetworkOrder(file.Size)), 0, metaBuf, 4, 8);
                     await stream.WriteAsync(metaBuf, 0, 12, token);
 
+                    if (file.Size == 0)
+                    {
+                        // Empty file: send nothing, but still report progress and complete
+                        ProgressChanged?.Invoke(new TransferProgressReport
+                        {
+                            SessionId = sessionId,
+                            CurrentFileName = file.Name,
+                            CurrentFileIndex = i + 1,
+                            TotalFiles = filesToTransfer.Count,
+                            TotalBytesTransferred = totalBytesSent,
+                            TotalBytes = totalSize,
+                            Percentage = totalSize > 0 ? (double)totalBytesSent / totalSize * 100.0 : 100.0,
+                            SpeedBytesPerSec = 0,
+                            EstimatedTimeRemaining = TimeSpan.Zero
+                        });
+                        continue;
+                    }
+
                     using (var fileStream = new FileStream(
-                        file.LocalPath, 
-                        FileMode.Open, 
-                        FileAccess.Read, 
-                        FileShare.Read, 
-                        bufferSize: ChunkSize, 
+                        file.LocalPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read,
+                        bufferSize: ChunkSize,
                         useAsync: true))
                     {
                         long remaining = file.Size;
@@ -126,7 +163,12 @@ namespace SpeedShareWindows.Network
                         {
                             int toRead = (int)Math.Min(ChunkSize, remaining);
                             int bytesRead = await fileStream.ReadAsync(buffer.AsMemory(0, toRead), token);
-                            if (bytesRead == 0) break;
+                            if (bytesRead == 0)
+                            {
+                                // Premature EOF on local file — protocol violation
+                                throw new EndOfStreamException(
+                                    $"Local file '{file.LocalPath}' ended before its declared size of {file.Size} bytes.");
+                            }
 
                             await stream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
                             remaining -= bytesRead;

@@ -18,6 +18,7 @@ import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TransferClient(
     private val context: Context,
@@ -28,21 +29,28 @@ class TransferClient(
         private const val TAG = "TransferClient"
     }
 
-    private var activeSocket: Socket? = null
+    private val activeSocket: java.util.concurrent.atomic.AtomicReference<Socket?> =
+        java.util.concurrent.atomic.AtomicReference(null)
+    private val cancelRequested = AtomicBoolean(false)
 
     private val _progressFlow = MutableStateFlow<TransferProgress?>(null)
     val progressFlow = _progressFlow
 
-    private val _transferResultFlow = MutableSharedFlow<Pair<Boolean, String?>>()
+    private val _transferResultFlow = MutableSharedFlow<Pair<Boolean, String?>>(
+        replay = 0,
+        extraBufferCapacity = 4
+    )
     val transferResultFlow: SharedFlow<Pair<Boolean, String?>> = _transferResultFlow.asSharedFlow()
 
     fun cancel() {
-        try {
-            activeSocket?.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Cancel error: ${e.message}")
+        cancelRequested.set(true)
+        activeSocket.getAndSet(null)?.let { socket ->
+            try {
+                socket.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Cancel error: ${e.message}")
+            }
         }
-        activeSocket = null
     }
 
     suspend fun sendFiles(
@@ -50,9 +58,10 @@ class TransferClient(
         localDeviceName: String,
         files: List<FileItem>
     ) = withContext(Dispatchers.IO) {
+        cancelRequested.set(false)
         val sessionId = UUID.randomUUID().toString().replace("-", "")
         val socket = Socket()
-        activeSocket = socket
+        activeSocket.set(socket)
         var averageSpeed = 0.0
 
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
@@ -65,7 +74,10 @@ class TransferClient(
             socket.tcpNoDelay = true
             socket.sendBufferSize = 2 * 1024 * 1024
             socket.receiveBufferSize = 2 * 1024 * 1024
-            socket.connect(InetSocketAddress(targetPeer.ipAddress, targetPeer.port), 5000)
+
+            var connectTarget = targetPeer.ipAddress
+            if (connectTarget.startsWith("::ffff:")) connectTarget = connectTarget.substring(7)
+            socket.connect(InetSocketAddress(connectTarget, targetPeer.port), 5000)
 
             val inputStream = DataInputStream(socket.getInputStream())
             val outputStream = DataOutputStream(socket.getOutputStream())
@@ -145,6 +157,38 @@ class TransferClient(
                 outputStream.writeLong(fileItem.size)
                 outputStream.flush()
 
+                if (fileItem.size == 0L) {
+                    // Empty file: nothing to stream, but still record history
+                    val fileDurationSec = (System.currentTimeMillis() - fileStartTime) / 1000.0
+                    historyRepository.addRecord(
+                        TransferRecord(
+                            fileName = fileItem.name,
+                            fileSize = fileItem.size,
+                            mimeType = fileItem.mimeType,
+                            direction = TransferDirection.SENT,
+                            status = TransferStatus.COMPLETED,
+                            peerName = targetPeer.deviceName,
+                            peerIp = targetPeer.ipAddress,
+                            speedBytesPerSec = averageSpeed
+                        )
+                    )
+                    // report 100% for the (empty) file
+                    if (totalSize > 0) {
+                        _progressFlow.value = TransferProgress(
+                            sessionId = sessionId,
+                            currentFileName = fileItem.name,
+                            currentFileIndex = i + 1,
+                            totalFiles = files.size,
+                            transferredBytes = totalBytesSent,
+                            totalBytes = totalSize,
+                            percentage = if (totalSize > 0) (totalBytesSent.toFloat() / totalSize.toFloat() * 100f) else 100f,
+                            speedBytesPerSec = averageSpeed,
+                            etaSeconds = 0L
+                        )
+                    }
+                    continue
+                }
+
                 var inStream: InputStream? = null
                 try {
                     inStream = if (fileItem.uri != null) {
@@ -159,9 +203,9 @@ class TransferClient(
 
                     var remaining = fileItem.size
                     while (remaining > 0) {
-                        val toRead = Math.min(CHUNK_SIZE.toLong(), remaining).toInt()
+                        val toRead = minOf(CHUNK_SIZE.toLong(), remaining).toInt()
                         val bytesRead = inStream.read(buffer, 0, toRead)
-                        if (bytesRead == -1) break
+                        if (bytesRead == -1) break  // EOF before size; let receiver detect
 
                         outputStream.write(buffer, 0, bytesRead)
                         remaining -= bytesRead
@@ -172,7 +216,7 @@ class TransferClient(
                             val deltaSec = (now - lastReportTime) / 1000.0
                             val speed = if (deltaSec > 0) (totalBytesSent - lastReportBytes) / deltaSec else 0.0
                             averageSpeed = speed
-                            val remainingBytes = Math.max(0L, totalSize - totalBytesSent)
+                            val remainingBytes = maxOf(0L, totalSize - totalBytesSent)
                             val eta = if (speed > 0) (remainingBytes / speed).toLong() else 0L
 
                             _progressFlow.value = TransferProgress(
@@ -193,11 +237,14 @@ class TransferClient(
                     }
                     outputStream.flush()
                 } finally {
-                    try { inStream?.close() } catch (e: Exception) {}
+                    try { inStream?.close() } catch (_: Exception) {}
                 }
 
                 val fileDurationSec = (System.currentTimeMillis() - fileStartTime) / 1000.0
-                val fileAverageSpeed = if (fileDurationSec > 0) fileItem.size / fileDurationSec else averageSpeed
+                val fileAverageSpeed = when {
+                    fileDurationSec > 0.001 -> fileItem.size / fileDurationSec
+                    else -> averageSpeed
+                }
 
                 // Add record to history with true average speed
                 historyRepository.addRecord(
@@ -221,29 +268,35 @@ class TransferClient(
 
             _transferResultFlow.emit(Pair(true, null))
         } catch (e: Exception) {
-            Log.e(TAG, "Send error: ${e.message}")
+            if (cancelRequested.get()) {
+                Log.d(TAG, "Transfer cancelled by user")
+                // Single cancellation signal: do not double-emit; ViewModel will
+                // already have shown a dialog.
+            } else {
+                Log.e(TAG, "Send error: ${e.message}")
 
-            files.forEach { f ->
-                historyRepository.addRecord(
-                    TransferRecord(
-                        fileName = f.name,
-                        fileSize = f.size,
-                        mimeType = f.mimeType,
-                        direction = TransferDirection.SENT,
-                        status = TransferStatus.FAILED,
-                        peerName = targetPeer.deviceName,
-                        peerIp = targetPeer.ipAddress
+                files.forEach { f ->
+                    historyRepository.addRecord(
+                        TransferRecord(
+                            fileName = f.name,
+                            fileSize = f.size,
+                            mimeType = f.mimeType,
+                            direction = TransferDirection.SENT,
+                            status = TransferStatus.FAILED,
+                            peerName = targetPeer.deviceName,
+                            peerIp = targetPeer.ipAddress
+                        )
                     )
-                )
-            }
+                }
 
-            _transferResultFlow.emit(Pair(false, e.message ?: "Transfer error"))
+                _transferResultFlow.emit(Pair(false, e.message ?: "Transfer error"))
+            }
         } finally {
             try {
                 if (wakeLock?.isHeld == true) wakeLock.release()
-            } catch (e: Exception) {}
-            try { socket.close() } catch (e: Exception) {}
-            activeSocket = null
+            } catch (_: Exception) {}
+            try { socket.close() } catch (_: Exception) {}
+            activeSocket.compareAndSet(socket, null)
         }
     }
 }

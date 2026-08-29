@@ -151,6 +151,8 @@ namespace SpeedShareWindows.Network
                                 PeerUpdated?.Invoke(peer);
                             }
 
+                            // Always notify on add/update so the UI learns about
+                            // peers without waiting for the next cleanup tick.
                             PeerListChanged?.Invoke(_peers.Values.ToList());
                         }
                     }

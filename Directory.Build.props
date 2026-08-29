@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <SpeedShareVersion>$([System.IO.File]::ReadAllText("$(MSBuildThisFileDirectory)VERSION").Trim())</SpeedShareVersion>
+    <Version>$(SpeedShareVersion)</Version>
+    <AssemblyVersion>$(SpeedShareVersion).0</AssemblyVersion>
+    <FileVersion>$(SpeedShareVersion).0</FileVersion>
+  </PropertyGroup>
+</Project>

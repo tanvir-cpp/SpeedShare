@@ -11,6 +11,9 @@ windows-installer/dist-installer/
 dist-installer/
 publish/
 release-artifacts/
+# Windows.Tests build output
+windows.Tests/bin/
+windows.Tests/obj/
 
 # Android / Gradle
 .gradle/

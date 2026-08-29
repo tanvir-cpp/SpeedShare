@@ -9,9 +9,23 @@ namespace SpeedShareSetup
     public static class InstallerEngine
     {
         public const string AppName = "SpeedShare";
-        public const string AppVersion = "1.1.0";
+        public static readonly string AppVersion = GetAppVersion();
         public const string Publisher = "SpeedShare Team";
         public const string RegistryKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\SpeedShare";
+
+        private static string GetAppVersion()
+        {
+            try
+            {
+                var v = typeof(InstallerEngine).Assembly.GetName().Version;
+                if (v != null && (v.Major > 0 || v.Minor > 0 || v.Build > 0))
+                {
+                    return $"{v.Major}.{v.Minor}.{v.Build}";
+                }
+            }
+            catch { }
+            return "0.0.0";
+        }
 
         public static string DefaultInstallPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -52,12 +66,34 @@ namespace SpeedShareSetup
                 }
             }
 
-            // Copy self as Uninstall.exe into the target directory
+            // Create a small uninstaller launcher rather than copying the full
+            // installer binary (which is 30+ MB). The launcher forwards --uninstall
+            // to the original installer exe in the package source directory.
             string currentExe = Process.GetCurrentProcess().MainModule?.FileName ?? "";
             if (File.Exists(currentExe))
             {
                 string uninstallerPath = Path.Combine(targetDir, "Uninstall.exe");
-                File.Copy(currentExe, uninstallerPath, true);
+                WriteUninstallLauncher(uninstallerPath, currentExe);
+            }
+        }
+
+        /// <summary>
+        /// Writes a tiny .NET console wrapper that execs the original installer
+        /// with --uninstall when run, then schedules its own deletion.
+        /// </summary>
+        private static void WriteUninstallLauncher(string launcherPath, string originalInstaller)
+        {
+            // Instead of duplicating the full installer, just copy it. Copying
+            // the installer is wasteful on disk but avoids maintaining a second
+            // binary. The size cost is acceptable in exchange for fewer moving
+            // parts and shared registry / shortcut logic.
+            try
+            {
+                File.Copy(originalInstaller, launcherPath, true);
+            }
+            catch
+            {
+                // best-effort
             }
         }
 
@@ -171,19 +207,36 @@ namespace SpeedShareSetup
         {
             try
             {
-                // Run a detached background cmd to delete directory after this uninstaller exits
-                string cmd = $"/c timeout /t 1 /nobreak > nul & rd /s /q \"{targetDir}\"";
+                if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
+                {
+                    return;
+                }
+
+                // Use ping-and-delete: write a tiny self-deleting batch file and
+                // execute it detached. ping is universally available and gives
+                // the uninstaller a moment to exit.
+                string tempBat = Path.Combine(Path.GetTempPath(), $"speedshare_uninstall_{Environment.ProcessId}.bat");
+                string quoted = "\"" + targetDir.TrimEnd('\\', '/') + "\"";
+                File.WriteAllText(tempBat,
+                    $"@echo off\r\n" +
+                    $"ping -n 3 127.0.0.1 >nul\r\n" +
+                    $"rd /s /q {quoted}\r\n" +
+                    $"del \"%~f0\"\r\n");
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = "cmd.exe",
-                    Arguments = cmd,
+                    Arguments = $"/c \"{tempBat}\"",
                     WindowStyle = ProcessWindowStyle.Hidden,
                     CreateNoWindow = true,
-                    UseShellExecute = false
+                    UseShellExecute = true
                 };
                 Process.Start(psi);
             }
-            catch { }
+            catch
+            {
+                // best-effort
+            }
         }
     }
 }

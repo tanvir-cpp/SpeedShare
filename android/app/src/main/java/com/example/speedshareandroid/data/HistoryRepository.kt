@@ -8,6 +8,8 @@ import com.example.speedshareandroid.models.TransferRecord
 import com.example.speedshareandroid.models.TransferStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,17 +20,23 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 class HistoryRepository(private val context: Context) {
     companion object {
         private const val FILE_NAME = "transfer_history.json"
         private const val TAG = "HistoryRepository"
+        private const val SAVE_DEBOUNCE_MS = 400L
+        private const val MAX_RECORDS = 2000
     }
 
     private val mutex = Mutex()
     private val scope = CoroutineScope(Dispatchers.IO)
     private val _records = MutableStateFlow<List<TransferRecord>>(emptyList())
     val records: StateFlow<List<TransferRecord>> = _records.asStateFlow()
+
+    private val savePending = AtomicBoolean(false)
+    private var saveJob: Job? = null
 
     init {
         scope.launch {
@@ -46,6 +54,10 @@ class HistoryRepository(private val context: Context) {
                 }
 
                 val jsonStr = file.readText(Charsets.UTF_8)
+                if (jsonStr.isBlank()) {
+                    _records.value = emptyList()
+                    return@withContext
+                }
                 val jsonArray = JSONArray(jsonStr)
                 val list = mutableListOf<TransferRecord>()
 
@@ -67,7 +79,6 @@ class HistoryRepository(private val context: Context) {
                         )
                     )
                 }
-                // Sort newest first
                 _records.value = list.sortedByDescending { it.timestamp }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load history: ${e.message}")
@@ -75,29 +86,57 @@ class HistoryRepository(private val context: Context) {
         }
     }
 
-    private suspend fun saveRecords() = withContext(Dispatchers.IO) {
-        try {
-            val jsonArray = JSONArray()
-            _records.value.forEach { r ->
-                val obj = JSONObject().apply {
-                    put("id", r.id)
-                    put("fileName", r.fileName)
-                    put("filePath", r.filePath ?: "")
-                    put("fileSize", r.fileSize)
-                    put("mimeType", r.mimeType)
-                    put("direction", r.direction.name)
-                    put("status", r.status.name)
-                    put("peerName", r.peerName)
-                    put("peerIp", r.peerIp)
-                    put("speedBytesPerSec", r.speedBytesPerSec)
-                    put("timestamp", r.timestamp)
-                }
-                jsonArray.put(obj)
+    /**
+     * Persist the current record list. Coalesces rapid successive calls via a
+     * debounce so a multi-file transfer doesn't rewrite the JSON file N times.
+     */
+    private fun scheduleSave() {
+        if (!savePending.compareAndSet(false, true)) return
+        saveJob?.cancel()
+        saveJob = scope.launch {
+            try {
+                delay(SAVE_DEBOUNCE_MS)
+            } finally {
+                savePending.set(false)
             }
-            val file = File(context.filesDir, FILE_NAME)
-            file.writeText(jsonArray.toString(), Charsets.UTF_8)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save history: ${e.message}")
+            persistNow()
+        }
+    }
+
+    private suspend fun persistNow() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            try {
+                val snapshot = _records.value
+                val jsonArray = JSONArray()
+                snapshot.forEach { r ->
+                    val obj = JSONObject().apply {
+                        put("id", r.id)
+                        put("fileName", r.fileName)
+                        put("filePath", r.filePath ?: "")
+                        put("fileSize", r.fileSize)
+                        put("mimeType", r.mimeType)
+                        put("direction", r.direction.name)
+                        put("status", r.status.name)
+                        put("peerName", r.peerName)
+                        put("peerIp", r.peerIp)
+                        put("speedBytesPerSec", r.speedBytesPerSec)
+                        put("timestamp", r.timestamp)
+                    }
+                    jsonArray.put(obj)
+                }
+                val file = File(context.filesDir, FILE_NAME)
+                // Write to temp then rename to avoid torn writes if the process
+                // is killed mid-write.
+                val tmp = File(context.filesDir, "$FILE_NAME.tmp")
+                tmp.writeText(jsonArray.toString(), Charsets.UTF_8)
+                if (file.exists()) file.delete()
+                if (!tmp.renameTo(file)) {
+                    file.writeText(jsonArray.toString(), Charsets.UTF_8)
+                    tmp.delete()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save history: ${e.message}")
+            }
         }
     }
 
@@ -105,23 +144,27 @@ class HistoryRepository(private val context: Context) {
         mutex.withLock {
             val current = _records.value.toMutableList()
             current.add(0, record)
-            _records.value = current
-            saveRecords()
+            // Cap history size to keep the JSON file from growing unbounded
+            val capped = if (current.size > MAX_RECORDS) {
+                current.subList(0, MAX_RECORDS)
+            } else current
+            _records.value = capped
         }
+        scheduleSave()
     }
 
     suspend fun deleteRecord(id: String) = withContext(Dispatchers.IO) {
         mutex.withLock {
             _records.value = _records.value.filter { it.id != id }
-            saveRecords()
         }
+        scheduleSave()
     }
 
     suspend fun clearAll() = withContext(Dispatchers.IO) {
         mutex.withLock {
             _records.value = emptyList()
-            saveRecords()
         }
+        scheduleSave()
     }
 
     fun filterRecords(

@@ -31,6 +31,11 @@ namespace SpeedShareWindows
         private IncomingTransferRequestArgs? _currentIncomingRequest;
         private bool _isTransferActive = false;
 
+        // Explicit state for the in-flight transfer modal so the cancel button
+        // doesn't have to inspect its own text.
+        private enum TransferModalState { InProgress, Succeeded, Failed, Cancelled }
+        private TransferModalState _modalState = TransferModalState.InProgress;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -66,6 +71,24 @@ namespace SpeedShareWindows
             LocalInfoText.Text = $"{_discoveryService.DeviceName} • {localIp}";
             TxtCustomDeviceName.Text = _discoveryService.DeviceName;
             TxtDownloadFolder.Text = _transferServer.DownloadFolder;
+
+            var versionTag = $"v{UpdateCheckerService.CurrentVersion}";
+            TxtSettingsUpdateTitle.Text = $"SpeedShare {versionTag}";
+            TxtUpdateCurrentVersion.Text = $" • Current: {versionTag}";
+
+            // Load persisted settings (device name, download folder)
+            var (savedName, savedFolder) = SettingsService.Load();
+            if (!string.IsNullOrWhiteSpace(savedName))
+            {
+                _discoveryService.DeviceName = savedName;
+                LocalInfoText.Text = $"{savedName} • {localIp}";
+                TxtCustomDeviceName.Text = savedName;
+            }
+            if (!string.IsNullOrWhiteSpace(savedFolder) && Directory.Exists(savedFolder))
+            {
+                _transferServer.DownloadFolder = savedFolder;
+                TxtDownloadFolder.Text = savedFolder;
+            }
 
             _transferServer.Start();
             _discoveryService.Start();
@@ -341,6 +364,8 @@ namespace SpeedShareWindows
             if (_selectedPeer == null || _selectedFiles.Count == 0 || _isTransferActive) return;
 
             _isTransferActive = true;
+            _modalWasReceiving = false;
+            _modalState = TransferModalState.InProgress;
             UpdateSendButtonState();
 
             TxtTransferTitle.Text = $"Sending to {_selectedPeer.DeviceName}";
@@ -351,6 +376,7 @@ namespace SpeedShareWindows
             TxtTransferStats.Text = "Connecting...";
             TxtTransferEta.Text = "Waiting...";
             TxtCurrentFile.Text = "Waiting for peer to accept...";
+            BtnCancelTransfer.Content = "Cancel Transfer";
             TransferModal.Visibility = Visibility.Visible;
 
             var files = _selectedFiles.ToList();
@@ -369,6 +395,8 @@ namespace SpeedShareWindows
 
                 if (success)
                 {
+                    _modalState = TransferModalState.Succeeded;
+                    _modalWasReceiving = false;
                     TxtTransferTitle.Text = "Transfer Complete!";
                     TxtTransferSubTitle.Text = "All files sent successfully.";
                     TransferProgressBar.Value = 100;
@@ -380,11 +408,16 @@ namespace SpeedShareWindows
                 }
                 else
                 {
-                    TxtTransferTitle.Text = "Transfer Failed / Declined";
+                    _modalState = error?.Contains("cancelled", StringComparison.OrdinalIgnoreCase) == true
+                        ? TransferModalState.Cancelled
+                        : TransferModalState.Failed;
+                    TxtTransferTitle.Text = _modalState == TransferModalState.Cancelled
+                        ? "Transfer Cancelled"
+                        : "Transfer Failed / Declined";
                     TxtTransferSubTitle.Text = error ?? "Transfer could not be completed.";
                     TxtLiveSpeed.Text = "Stopped";
                     TxtLiveBitrate.Text = "";
-                    TxtTransferEta.Text = "Aborted";
+                    TxtTransferEta.Text = _modalState == TransferModalState.Cancelled ? "Cancelled" : "Aborted";
                     BtnCancelTransfer.Content = "Close";
                 }
             });
@@ -427,6 +460,8 @@ namespace SpeedShareWindows
             IncomingModal.Visibility = Visibility.Collapsed;
 
             _isTransferActive = true;
+            _modalWasReceiving = true;
+            _modalState = TransferModalState.InProgress;
             UpdateSendButtonState();
 
             TxtTransferTitle.Text = $"Receiving from {_currentIncomingRequest.SenderDevice}";
@@ -460,6 +495,8 @@ namespace SpeedShareWindows
 
                 if (success)
                 {
+                    _modalState = TransferModalState.Succeeded;
+                    _modalWasReceiving = true;
                     TxtTransferTitle.Text = "Transfer Complete!";
                     TxtTransferSubTitle.Text = $"Files saved to {_transferServer.DownloadFolder}";
                     TransferProgressBar.Value = 100;
@@ -471,11 +508,16 @@ namespace SpeedShareWindows
                 }
                 else
                 {
-                    TxtTransferTitle.Text = "Transfer Ended";
+                    _modalState = error?.Contains("cancel", StringComparison.OrdinalIgnoreCase) == true
+                        ? TransferModalState.Cancelled
+                        : TransferModalState.Failed;
+                    TxtTransferTitle.Text = _modalState == TransferModalState.Cancelled
+                        ? "Transfer Cancelled"
+                        : "Transfer Ended";
                     TxtTransferSubTitle.Text = error ?? "Transfer was interrupted.";
                     TxtLiveSpeed.Text = "Stopped";
                     TxtLiveBitrate.Text = "";
-                    TxtTransferEta.Text = "Aborted";
+                    TxtTransferEta.Text = _modalState == TransferModalState.Cancelled ? "Cancelled" : "Aborted";
                     BtnCancelTransfer.Content = "Close";
                 }
             });
@@ -500,26 +542,32 @@ namespace SpeedShareWindows
 
         private void BtnCancelTransfer_Click(object sender, RoutedEventArgs e)
         {
-            if (BtnCancelTransfer.Content.ToString() == "Open Folder & Close")
+            switch (_modalState)
             {
-                BtnOpenFolder_Click(sender, e);
-                TransferModal.Visibility = Visibility.Collapsed;
-                return;
+                case TransferModalState.Succeeded:
+                    if (_modalWasReceiving)
+                    {
+                        BtnOpenFolder_Click(sender, e);
+                    }
+                    TransferModal.Visibility = Visibility.Collapsed;
+                    break;
+                case TransferModalState.Failed:
+                case TransferModalState.Cancelled:
+                    TransferModal.Visibility = Visibility.Collapsed;
+                    break;
+                default: // InProgress
+                    _transferClient.Cancel();
+                    _modalState = TransferModalState.Cancelled;
+                    _transferServer.Stop();
+                    _transferServer.Start();
+                    TransferModal.Visibility = Visibility.Collapsed;
+                    _isTransferActive = false;
+                    UpdateSendButtonState();
+                    break;
             }
-
-            if (BtnCancelTransfer.Content.ToString() == "Close")
-            {
-                TransferModal.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            _transferClient.Cancel();
-            _transferServer.Stop();
-            _transferServer.Start();
-            TransferModal.Visibility = Visibility.Collapsed;
-            _isTransferActive = false;
-            UpdateSendButtonState();
         }
+
+        private bool _modalWasReceiving = false;
 
         #endregion
 
@@ -570,17 +618,23 @@ namespace SpeedShareWindows
 
         private void BtnSaveSettings_Click(object sender, RoutedEventArgs e)
         {
+            string? newName = null;
+            string? newFolder = null;
+
             if (!string.IsNullOrWhiteSpace(TxtCustomDeviceName.Text))
             {
                 _discoveryService.DeviceName = TxtCustomDeviceName.Text.Trim();
                 LocalInfoText.Text = $"{_discoveryService.DeviceName} • {GetLocalIpAddress()}";
+                newName = _discoveryService.DeviceName;
             }
 
             if (!string.IsNullOrWhiteSpace(TxtDownloadFolder.Text) && Directory.Exists(TxtDownloadFolder.Text))
             {
                 _transferServer.DownloadFolder = TxtDownloadFolder.Text;
+                newFolder = TxtDownloadFolder.Text;
             }
 
+            SettingsService.Save(newName, newFolder);
             SettingsModal.Visibility = Visibility.Collapsed;
             _ = _discoveryService.BroadcastBeaconAsync();
         }

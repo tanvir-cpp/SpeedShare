@@ -20,6 +20,8 @@ import java.io.FileOutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 class TransferServer(
     private val context: Context,
@@ -34,17 +36,27 @@ class TransferServer(
     private var serverSocket: ServerSocket? = null
     private var scope: CoroutineScope? = null
 
-    private val _incomingRequestFlow = MutableSharedFlow<IncomingTransferRequest>()
+    private val _incomingRequestFlow = MutableSharedFlow<IncomingTransferRequest>(
+        replay = 0,
+        extraBufferCapacity = 8
+    )
     val incomingRequestFlow: SharedFlow<IncomingTransferRequest> = _incomingRequestFlow.asSharedFlow()
 
     private val _progressFlow = MutableStateFlow<TransferProgress?>(null)
     val progressFlow = _progressFlow
 
-    private val _transferCompletedFlow = MutableSharedFlow<Pair<Boolean, String?>>()
+    private val _transferCompletedFlow = MutableSharedFlow<Pair<Boolean, String?>>(
+        replay = 0,
+        extraBufferCapacity = 8
+    )
     val transferCompletedFlow: SharedFlow<Pair<Boolean, String?>> = _transferCompletedFlow.asSharedFlow()
 
-    private var activeDecisionDeferred: CompletableDeferred<Boolean>? = null
-    private var activeSocket: Socket? = null
+    // Per-session decision and tracking so multiple concurrent incoming
+    // transfers are supported (previous code overwrote a single field).
+    private val pendingDecisions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val activeSockets = ConcurrentHashMap<String, Socket>()
+    private val requestMeta = ConcurrentHashMap<String, Pair<String, String>>() // sessionId -> (senderDevice, senderIp)
+    private val sessionIdGen = AtomicLong(System.currentTimeMillis())
 
     fun start(port: Int = DEFAULT_PORT) {
         stop()
@@ -65,9 +77,8 @@ class TransferServer(
                     client.tcpNoDelay = true
                     client.receiveBufferSize = 2 * 1024 * 1024
                     client.sendBufferSize = 2 * 1024 * 1024
-                    activeSocket = client
 
-                    launch {
+                    scope?.launch {
                         handleClient(client)
                     }
                 }
@@ -82,47 +93,65 @@ class TransferServer(
     fun stop() {
         scope?.cancel()
         scope = null
+        // Close all active sockets and cancel pending decisions
+        activeSockets.values.forEach { runCatching { it.close() } }
+        activeSockets.clear()
+        pendingDecisions.values.forEach { it.cancel() }
+        pendingDecisions.clear()
+        requestMeta.clear()
+
         try {
-            activeSocket?.close()
             serverSocket?.close()
         } catch (e: Exception) {
             Log.w(TAG, "Server close error: ${e.message}")
         }
-        activeSocket = null
         serverSocket = null
     }
 
-    fun acceptTransfer() {
-        activeDecisionDeferred?.complete(true)
+    fun acceptTransfer(sessionId: String? = null) {
+        if (sessionId == null) {
+            // accept most recent pending
+            pendingDecisions.values.lastOrNull()?.complete(true)
+        } else {
+            pendingDecisions.remove(sessionId)?.complete(true)
+        }
     }
 
-    fun declineTransfer() {
-        activeDecisionDeferred?.complete(false)
+    fun declineTransfer(sessionId: String? = null) {
+        if (sessionId == null) {
+            pendingDecisions.values.lastOrNull()?.complete(false)
+        } else {
+            pendingDecisions.remove(sessionId)?.complete(false)
+        }
     }
 
-    fun cancelTransfer() {
-        try {
-            activeSocket?.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Cancel error: ${e.message}")
+    fun cancelTransfer(sessionId: String? = null) {
+        if (sessionId == null) {
+            activeSockets.values.forEach { runCatching { it.close() } }
+            activeSockets.clear()
+        } else {
+            activeSockets.remove(sessionId)?.let { runCatching { it.close() } }
         }
     }
 
     private suspend fun handleClient(socket: Socket) = withContext(Dispatchers.IO) {
         var currentSenderDevice = "Unknown Device"
-        var currentSenderIp = socket.inetAddress.hostAddress ?: ""
+        var currentSenderIp = socket.inetAddress?.hostAddress ?: ""
+        if (currentSenderIp.startsWith("::ffff:")) currentSenderIp = currentSenderIp.substring(7)
+        var sessionId = "ss-${sessionIdGen.incrementAndGet().toString(16)}"
         val receivedFilesList = mutableListOf<FileItem>()
         var averageSpeed = 0.0
 
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         val wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SpeedShare:TransferServerWakeLock")?.apply {
             setReferenceCounted(false)
-            acquire(15 * 60 * 1000L) // 15 min safety timeout
+            acquire(15 * 60 * 1000L)
         }
 
         try {
             val inputStream = DataInputStream(socket.getInputStream())
             val outputStream = DataOutputStream(socket.getOutputStream())
+            activeSockets[sessionId] = socket
 
             // 1. Read header length
             val headerLength = inputStream.readInt()
@@ -140,7 +169,7 @@ class TransferServer(
                 throw IllegalArgumentException("Unexpected action: $action")
             }
 
-            val sessionId = json.optString("sessionId")
+            sessionId = json.optString("sessionId").ifEmpty { sessionId }
             currentSenderDevice = json.optString("senderDevice", "Remote Device")
             val devType = json.optString("deviceType", "WINDOWS")
             val totalSize = json.optLong("totalSize")
@@ -158,6 +187,14 @@ class TransferServer(
                 )
             }
 
+            // Replace the active socket entry now that we have a real sessionId
+            val oldId = activeSockets.entries.firstOrNull { it.value === socket }?.key
+            if (oldId != null && oldId != sessionId) {
+                activeSockets.remove(oldId)
+            }
+            activeSockets[sessionId] = socket
+            requestMeta[sessionId] = currentSenderDevice to currentSenderIp
+
             val request = IncomingTransferRequest(
                 sessionId = sessionId,
                 senderDevice = currentSenderDevice,
@@ -169,10 +206,18 @@ class TransferServer(
 
             // Prompt user
             val decisionDeferred = CompletableDeferred<Boolean>()
-            activeDecisionDeferred = decisionDeferred
+            pendingDecisions[sessionId] = decisionDeferred
             _incomingRequestFlow.emit(request)
 
-            val isAccepted = decisionDeferred.await()
+            val isAccepted = try {
+                decisionDeferred.await()
+            } catch (e: CancellationException) {
+                // Server was stopped
+                false
+            } finally {
+                pendingDecisions.remove(sessionId)
+            }
+
             if (!isAccepted) {
                 val declineJson = JSONObject().apply {
                     put("action", "TRANSFER_DECLINE")
@@ -184,7 +229,6 @@ class TransferServer(
                 outputStream.write(declineJson)
                 outputStream.flush()
 
-                // Record declined / cancelled entries in history
                 receivedFilesList.forEach { f ->
                     historyRepository.addRecord(
                         TransferRecord(
@@ -233,49 +277,62 @@ class TransferServer(
                 val fileIndex = inputStream.readInt()
                 val fileSize = inputStream.readLong()
 
+                if (fileIndex != i) {
+                    Log.w(TAG, "Unexpected file index $fileIndex (expected $i)")
+                }
+
                 val safeFileName = fileMeta.name.replace("/", "_").replace("\\", "_")
                 val destFile = getUniqueFile(downloadDir, safeFileName)
 
-                FileOutputStream(destFile).use { fos ->
-                    var remaining = fileSize
-                    while (remaining > 0) {
-                        val toRead = Math.min(CHUNK_SIZE.toLong(), remaining).toInt()
-                        val bytesRead = inputStream.read(buffer, 0, toRead)
-                        if (bytesRead == -1) throw java.io.EOFException("Premature end of stream")
+                if (fileSize == 0L) {
+                    // Empty file: still need to create it so MediaScanner picks it up
+                    destFile.createNewFile()
+                } else {
+                    FileOutputStream(destFile).use { fos ->
+                        var remaining = fileSize
+                        while (remaining > 0) {
+                            val toRead = minOf(CHUNK_SIZE.toLong(), remaining).toInt()
+                            val bytesRead = inputStream.read(buffer, 0, toRead)
+                            if (bytesRead == -1) throw java.io.EOFException("Premature end of stream")
 
-                        fos.write(buffer, 0, bytesRead)
-                        remaining -= bytesRead
-                        totalBytesTransferred += bytesRead
+                            fos.write(buffer, 0, bytesRead)
+                            remaining -= bytesRead
+                            totalBytesTransferred += bytesRead
 
-                        val now = System.currentTimeMillis()
-                        if (now - lastReportTime >= 200 || totalBytesTransferred == totalSize) {
-                            val deltaSec = (now - lastReportTime) / 1000.0
-                            val speed = if (deltaSec > 0) (totalBytesTransferred - lastReportBytes) / deltaSec else 0.0
-                            averageSpeed = speed
-                            val remainingBytes = Math.max(0L, totalSize - totalBytesTransferred)
-                            val eta = if (speed > 0) (remainingBytes / speed).toLong() else 0L
+                            val now = System.currentTimeMillis()
+                            if (now - lastReportTime >= 200 || totalBytesTransferred == totalSize) {
+                                val deltaSec = (now - lastReportTime) / 1000.0
+                                val speed = if (deltaSec > 0) (totalBytesTransferred - lastReportBytes) / deltaSec else 0.0
+                                averageSpeed = speed
+                                val remainingBytes = maxOf(0L, totalSize - totalBytesTransferred)
+                                val eta = if (speed > 0) (remainingBytes / speed).toLong() else 0L
 
-                            _progressFlow.value = TransferProgress(
-                                sessionId = sessionId,
-                                currentFileName = safeFileName,
-                                currentFileIndex = i + 1,
-                                totalFiles = receivedFilesList.size,
-                                transferredBytes = totalBytesTransferred,
-                                totalBytes = totalSize,
-                                percentage = if (totalSize > 0) (totalBytesTransferred.toFloat() / totalSize.toFloat() * 100f) else 100f,
-                                speedBytesPerSec = speed,
-                                etaSeconds = eta
-                            )
+                                _progressFlow.value = TransferProgress(
+                                    sessionId = sessionId,
+                                    currentFileName = safeFileName,
+                                    currentFileIndex = i + 1,
+                                    totalFiles = receivedFilesList.size,
+                                    transferredBytes = totalBytesTransferred,
+                                    totalBytes = totalSize,
+                                    percentage = if (totalSize > 0) (totalBytesTransferred.toFloat() / totalSize.toFloat() * 100f) else 100f,
+                                    speedBytesPerSec = speed,
+                                    etaSeconds = eta
+                                )
 
-                            lastReportBytes = totalBytesTransferred
-                            lastReportTime = now
+                                lastReportBytes = totalBytesTransferred
+                                lastReportTime = now
+                            }
                         }
+                        fos.flush()
                     }
-                    fos.flush()
                 }
 
                 val fileDurationSec = (System.currentTimeMillis() - fileStartTime) / 1000.0
-                val fileAverageSpeed = if (fileDurationSec > 0) fileSize / fileDurationSec else averageSpeed
+                val fileAverageSpeed = when {
+                    fileSize == 0L -> averageSpeed
+                    fileDurationSec > 0.001 -> fileSize / fileDurationSec
+                    else -> averageSpeed
+                }
 
                 // Add successful history record with true average speed
                 historyRepository.addRecord(
@@ -314,7 +371,6 @@ class TransferServer(
         } catch (e: Exception) {
             Log.e(TAG, "Transfer receive error: ${e.message}")
 
-            // Log failed transfer to history
             if (receivedFilesList.isNotEmpty()) {
                 receivedFilesList.forEach { f ->
                     historyRepository.addRecord(
@@ -335,9 +391,10 @@ class TransferServer(
         } finally {
             try {
                 if (wakeLock?.isHeld == true) wakeLock.release()
-            } catch (e: Exception) {}
-            try { socket.close() } catch (e: Exception) {}
-            activeSocket = null
+            } catch (_: Exception) {}
+            try { socket.close() } catch (_: Exception) {}
+            activeSockets.remove(sessionId)
+            requestMeta.remove(sessionId)
         }
     }
 

@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.speedshareandroid.BuildConfig
 import com.example.speedshareandroid.data.HistoryRepository
 import com.example.speedshareandroid.models.*
 import com.example.speedshareandroid.network.DiscoveryManager
@@ -27,7 +28,7 @@ enum class AppTab {
 
 class SpeedShareViewModel(application: Application) : AndroidViewModel(application) {
 
-    val currentAppVersion = "1.1.0"
+    val currentAppVersion: String = BuildConfig.VERSION_NAME
 
     private val context: Context get() = getApplication<Application>().applicationContext
     private val prefs = context.getSharedPreferences("speedshare_prefs", Context.MODE_PRIVATE)
@@ -36,6 +37,9 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
     val discoveryManager: DiscoveryManager
     val transferServer: TransferServer
     val transferClient: TransferClient
+
+    // Cached local IP — recomputing per recomposition hit the network stack
+    val localIp: String get() = discoveryManager.getLocalIp()
 
     // Tab state
     private val _selectedTab = MutableStateFlow(AppTab.SHARE)
@@ -75,10 +79,12 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
 
     // History Tab Filter & Search
     val allHistoryRecords = historyRepository.records
-    private val _historySearchQuery = MutableStateFlow("")
+    private val _historySearchQuery = MutableStateFlow(prefs.getString("history_search", "") ?: "")
     val historySearchQuery: StateFlow<String> = _historySearchQuery.asStateFlow()
 
-    private val _historyFilter = MutableStateFlow(HistoryFilter.ALL)
+    private val _historyFilter = MutableStateFlow(
+        HistoryFilter.valueOf(prefs.getString("history_filter", HistoryFilter.ALL.name) ?: HistoryFilter.ALL.name)
+    )
     val historyFilter: StateFlow<HistoryFilter> = _historyFilter.asStateFlow()
 
     val filteredHistoryRecords: StateFlow<List<TransferRecord>> = combine(
@@ -140,10 +146,12 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setHistorySearchQuery(query: String) {
         _historySearchQuery.value = query
+        prefs.edit().putString("history_search", query).apply()
     }
 
     fun setHistoryFilter(filter: HistoryFilter) {
         _historyFilter.value = filter
+        prefs.edit().putString("history_filter", filter.name).apply()
     }
 
     fun selectPeer(peer: DiscoveredPeer) {
@@ -174,7 +182,9 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
 
-            if (currentList.none { it.uri == uri }) {
+            // Dedupe by URI, but also avoid name+size duplicates from "Open with" pickers
+            val already = currentList.any { it.uri == uri }
+            if (!already) {
                 currentList.add(
                     FileItem(
                         id = uri.toString(),
@@ -186,6 +196,64 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
         }
+        _selectedFiles.value = currentList
+    }
+
+    /**
+     * Walk a document tree URI (granted via Storage Access Framework) and enqueue
+     * every file as an individual FileItem. Subfolder structure is preserved in
+     * the display name.
+     */
+    fun addFilesFromTreeUri(ctx: Context, treeUri: Uri) {
+        val currentList = _selectedFiles.value.toMutableList()
+        val rootDoc = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+            treeUri,
+            android.provider.DocumentsContract.getTreeDocumentId(treeUri)
+        )
+
+        fun walk(parentUri: Uri, prefix: String) {
+            val children = ctx.contentResolver.query(
+                parentUri,
+                arrayOf(
+                    android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    android.provider.DocumentsContract.Document.COLUMN_SIZE
+                ),
+                null, null, null
+            ) ?: return
+            children.use { c ->
+                val idIdx = c.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameIdx = c.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeIdx = c.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val sizeIdx = c.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_SIZE)
+                while (c.moveToNext()) {
+                    val id = c.getString(idIdx) ?: continue
+                    val name = c.getString(nameIdx) ?: continue
+                    val mime = c.getString(mimeIdx) ?: "application/octet-stream"
+                    val size = if (sizeIdx >= 0) c.getLong(sizeIdx) else 0L
+                    val childUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
+                    val display = if (prefix.isEmpty()) name else "$prefix/$name"
+
+                    if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
+                        walk(childUri, display)
+                    } else {
+                        if (currentList.none { it.uri == childUri }) {
+                            currentList.add(
+                                FileItem(
+                                    id = childUri.toString(),
+                                    name = display,
+                                    size = size,
+                                    mimeType = mime,
+                                    uri = childUri
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        walk(rootDoc, prefix = "")
         _selectedFiles.value = currentList
     }
 
@@ -209,19 +277,25 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun acceptIncoming() {
+        val req = _incomingRequest.value ?: return
         _incomingRequest.value = null
         _isTransferring.value = true
-        transferServer.acceptTransfer()
+        transferServer.acceptTransfer(req.sessionId)
     }
 
     fun declineIncoming() {
+        val req = _incomingRequest.value
         _incomingRequest.value = null
-        transferServer.declineTransfer()
+        if (req != null) {
+            transferServer.declineTransfer(req.sessionId)
+        } else {
+            transferServer.declineTransfer()
+        }
     }
 
     fun cancelTransfer() {
         transferClient.cancel()
-        transferServer.cancelTransfer()
+        transferServer.cancelTransfer(_incomingRequest.value?.sessionId)
         _isTransferring.value = false
         _transferStatusDialog.value = Pair(false, "Transfer cancelled.")
     }
@@ -355,9 +429,18 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             if (file != null && file.exists()) {
-                _updateDownloadProgress.value = null
-                _updateInfo.value = null
-                UpdateChecker.launchApkInstaller(context, file)
+                val launched = UpdateChecker.launchApkInstaller(context, file)
+                if (launched) {
+                    _updateDownloadProgress.value = null
+                    _updateInfo.value = null
+                } else {
+                    _updateDownloadProgress.value = null
+                    Toast.makeText(context, "Couldn't open installer. Opening browser...", Toast.LENGTH_SHORT).show()
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                }
             } else {
                 _updateDownloadProgress.value = null
                 Toast.makeText(context, "Download failed. Opening browser...", Toast.LENGTH_SHORT).show()

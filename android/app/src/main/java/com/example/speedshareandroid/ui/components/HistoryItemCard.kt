@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -218,6 +219,6 @@ private fun getCategoryMeta(category: String): Pair<ImageVector, Color> {
         "DOCUMENT" -> Pair(Icons.Default.Edit, NeonSky)
         "APP" -> Pair(Icons.Default.Phone, NeonIndigo)
         "CODE" -> Pair(Icons.Default.Build, NeonEmerald)
-        else -> Pair(Icons.Default.List, TextSecondary)
+        else -> Pair(Icons.AutoMirrored.Filled.List, TextSecondary)
     }
 }

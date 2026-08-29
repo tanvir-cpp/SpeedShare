@@ -45,13 +45,13 @@ data class FileItem(
     companion object {
         fun formatBytes(bytes: Long): String {
             if (bytes < 1024) return "$bytes B"
-            if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0)
-            if (bytes < 1024 * 1024 * 1024) return String.format("%.2f MB", bytes / (1024.0 * 1024.0))
-            return String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+            if (bytes < 1024 * 1024) return String.format(Locale.US, "%.1f KB", bytes / 1024.0)
+            if (bytes < 1024 * 1024 * 1024) return String.format(Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0))
+            return String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
         }
 
         fun getCategoryForFileName(name: String): String {
-            val lower = name.lowercase()
+            val lower = name.lowercase(Locale.US)
             return when {
                 lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".avi") || lower.endsWith(".mov") || lower.endsWith(".webm") || lower.endsWith(".3gp") -> "VIDEO"
                 lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".heic") || lower.endsWith(".svg") -> "IMAGE"
@@ -85,9 +85,9 @@ data class TransferRecord(
         get() {
             if (speedBytesPerSec <= 0) return ""
             if (speedBytesPerSec < 1024 * 1024) {
-                return String.format("%.1f KB/s", speedBytesPerSec / 1024.0)
+                return String.format(Locale.US, "%.1f KB/s", speedBytesPerSec / 1024.0)
             }
-            return String.format("%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
+            return String.format(Locale.US, "%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
         }
 
     val fileCategory: String get() = FileItem.getCategoryForFileName(fileName)
@@ -131,18 +131,18 @@ data class TransferProgress(
     val formattedSpeed: String
         get() {
             if (speedBytesPerSec < 1024 * 1024) {
-                return String.format("%.1f KB/s", speedBytesPerSec / 1024.0)
+                return String.format(Locale.US, "%.1f KB/s", speedBytesPerSec / 1024.0)
             }
-            return String.format("%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
+            return String.format(Locale.US, "%.1f MB/s", speedBytesPerSec / (1024.0 * 1024.0))
         }
 
     val formattedBitrate: String
         get() {
             val mbps = (speedBytesPerSec * 8.0) / (1000.0 * 1000.0)
             if (mbps >= 1000) {
-                return String.format("%.2f Gbps", mbps / 1000.0)
+                return String.format(Locale.US, "%.2f Gbps", mbps / 1000.0)
             }
-            return String.format("%.1f Mbps", mbps)
+            return String.format(Locale.US, "%.1f Mbps", mbps)
         }
 
     val formattedEta: String
@@ -162,3 +162,4 @@ data class IncomingTransferRequest(
     val totalSize: Long,
     val senderIp: String
 )
+

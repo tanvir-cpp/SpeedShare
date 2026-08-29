@@ -14,14 +14,18 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.NetworkInterface
+import java.net.SocketException
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 class DiscoveryManager(private val context: Context) {
     companion object {
         const val DISCOVERY_PORT = 53317
         const val DEFAULT_TRANSFER_PORT = 53318
         private const val TAG = "DiscoveryManager"
+        private const val BEACON_INTERVAL_MS = 1500L
+        private const val STALE_PEER_TIMEOUT_MS = 6000L
     }
 
     val deviceId: String = UUID.randomUUID().toString().replace("-", "").take(8)
@@ -33,50 +37,38 @@ class DiscoveryManager(private val context: Context) {
 
     private var multicastLock: WifiManager.MulticastLock? = null
     private var scope: CoroutineScope? = null
-    private var socket: DatagramSocket? = null
+
+    // Separate receive and send sockets to avoid interleaving send/recv on a single
+    // shared DatagramSocket (previously the same socket was used for both).
+    private var receiveSocket: DatagramSocket? = null
+    private var sendSocket: DatagramSocket? = null
+
+    // Monotonically increasing nonce so we can ignore our own broadcasts that some
+    // OS configurations deliver back to the loopback interface.
+    private val broadcastNonce = AtomicInteger(0)
 
     fun start() {
         stop()
         val job = SupervisorJob()
         scope = CoroutineScope(Dispatchers.IO + job)
 
-        try {
-            val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            multicastLock = wifi?.createMulticastLock("SpeedShareMulticastLock")?.apply {
-                setReferenceCounted(true)
-                acquire()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not acquire multicast lock: ${e.message}")
-        }
-
-        try {
-            socket = DatagramSocket(DISCOVERY_PORT).apply {
-                broadcast = true
-                reuseAddress = true
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to bind discovery socket on port $DISCOVERY_PORT: ${e.message}")
-            try {
-                socket = DatagramSocket().apply { broadcast = true }
-            } catch (ex: Exception) {
-                Log.e(TAG, "Failed to create fallback socket: ${ex.message}")
-            }
-        }
+        acquireMulticastLock()
+        bindReceiveSocket()
+        bindSendSocket()
 
         // Start listening
         scope?.launch { listenLoop() }
 
-        // Send initial discover ping & beacon
+        // Initial discover + beacon
         scope?.launch {
             broadcastDiscover()
             broadcastBeacon()
         }
 
-        // Start periodic beacon
+        // Periodic beacon
         scope?.launch {
             while (isActive) {
-                delay(1500)
+                delay(BEACON_INTERVAL_MS)
                 broadcastBeacon()
             }
         }
@@ -93,12 +85,10 @@ class DiscoveryManager(private val context: Context) {
     fun stop() {
         scope?.cancel()
         scope = null
-        try {
-            socket?.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Socket close error: ${e.message}")
-        }
-        socket = null
+        closeSocketQuietly(receiveSocket, "receive")
+        closeSocketQuietly(sendSocket, "send")
+        receiveSocket = null
+        sendSocket = null
 
         try {
             if (multicastLock?.isHeld == true) {
@@ -110,11 +100,58 @@ class DiscoveryManager(private val context: Context) {
         multicastLock = null
     }
 
+    private fun acquireMulticastLock() {
+        try {
+            val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            multicastLock = wifi?.createMulticastLock("SpeedShareMulticastLock")?.apply {
+                setReferenceCounted(true)
+                acquire()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not acquire multicast lock: ${e.message}")
+        }
+    }
+
+    private fun bindReceiveSocket() {
+        try {
+            receiveSocket = DatagramSocket(DISCOVERY_PORT).apply {
+                broadcast = true
+                reuseAddress = true
+                soTimeout = 1000  // allow cooperative cancellation
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to bind receive socket on port $DISCOVERY_PORT: ${e.message}")
+        }
+    }
+
+    private fun bindSendSocket() {
+        try {
+            sendSocket = DatagramSocket().apply {
+                broadcast = true
+                reuseAddress = true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to bind send socket: ${e.message}")
+        }
+    }
+
+    private fun closeSocketQuietly(s: DatagramSocket?, name: String) {
+        try {
+            s?.close()
+        } catch (e: Exception) {
+            Log.w(TAG, "Socket ($name) close error: ${e.message}")
+        }
+    }
+
     private suspend fun listenLoop() = withContext(Dispatchers.IO) {
         val buf = ByteArray(2048)
         while (isActive) {
+            val s = receiveSocket
+            if (s == null) {
+                delay(500)
+                continue
+            }
             try {
-                val s = socket ?: break
                 val packet = DatagramPacket(buf, buf.size)
                 s.receive(packet)
 
@@ -123,32 +160,41 @@ class DiscoveryManager(private val context: Context) {
 
                 val type = json.optString("type")
                 val senderDeviceId = json.optString("deviceId")
+                val senderNonce = json.optInt("nonce", -1)
 
-                if (senderDeviceId.isNotEmpty() && senderDeviceId != deviceId) {
-                    if (type == "DISCOVER") {
-                        broadcastBeacon()
-                    } else if (type == "BEACON") {
-                        val name = json.optString("deviceName", "Unknown Device")
-                        val devType = json.optString("deviceType", "UNKNOWN")
-                        val port = json.optInt("port", DEFAULT_TRANSFER_PORT)
-                        var senderIp = packet.address.hostAddress ?: ""
-                        if (senderIp.startsWith("::ffff:")) senderIp = senderIp.substring(7)
+                if (senderDeviceId.isEmpty() || senderDeviceId == deviceId) continue
+                // Some devices loop our packet back; ignore via nonce
+                if (senderNonce == broadcastNonce.get()) continue
 
-                        val peer = DiscoveredPeer(
-                            deviceId = senderDeviceId,
-                            deviceName = name,
-                            deviceType = devType,
-                            ipAddress = senderIp,
-                            port = port,
-                            lastSeen = System.currentTimeMillis()
-                        )
+                if (type == "DISCOVER") {
+                    // Reply once with a beacon
+                    broadcastBeacon()
+                } else if (type == "BEACON") {
+                    val name = json.optString("deviceName", "Unknown Device")
+                    val devType = json.optString("deviceType", "UNKNOWN")
+                    val port = json.optInt("port", DEFAULT_TRANSFER_PORT)
+                    var senderIp = packet.address.hostAddress ?: ""
+                    if (senderIp.startsWith("::ffff:")) senderIp = senderIp.substring(7)
 
-                        _peers[peer.deviceId] = peer
-                        _peersFlow.value = _peers.values.toList()
-                    }
+                    val peer = DiscoveredPeer(
+                        deviceId = senderDeviceId,
+                        deviceName = name,
+                        deviceType = devType,
+                        ipAddress = senderIp,
+                        port = port,
+                        lastSeen = System.currentTimeMillis()
+                    )
+
+                    _peers[peer.deviceId] = peer
+                    _peersFlow.value = _peers.values.toList()
+                }
+            } catch (e: SocketException) {
+                if (isActive) {
+                    Log.d(TAG, "Socket closed during receive")
+                    break
                 }
             } catch (e: Exception) {
-                if (scope?.isActive == true) {
+                if (isActive && scope?.isActive == true) {
                     Log.d(TAG, "Discovery receive warning: ${e.message}")
                 }
             }
@@ -157,12 +203,14 @@ class DiscoveryManager(private val context: Context) {
 
     fun broadcastDiscover() {
         try {
+            val nonce = broadcastNonce.incrementAndGet()
             val json = JSONObject().apply {
                 put("type", "DISCOVER")
                 put("deviceId", deviceId)
                 put("deviceName", deviceName)
                 put("deviceType", "ANDROID")
                 put("port", DEFAULT_TRANSFER_PORT)
+                put("nonce", nonce)
                 put("version", 1)
             }
             sendToAllInterfaces(json.toString().toByteArray(Charsets.UTF_8))
@@ -173,12 +221,14 @@ class DiscoveryManager(private val context: Context) {
 
     fun broadcastBeacon() {
         try {
+            val nonce = broadcastNonce.incrementAndGet()
             val json = JSONObject().apply {
                 put("type", "BEACON")
                 put("deviceId", deviceId)
                 put("deviceName", deviceName)
                 put("deviceType", "ANDROID")
                 put("port", DEFAULT_TRANSFER_PORT)
+                put("nonce", nonce)
                 put("version", 1)
             }
             sendToAllInterfaces(json.toString().toByteArray(Charsets.UTF_8))
@@ -188,14 +238,17 @@ class DiscoveryManager(private val context: Context) {
     }
 
     private fun sendToAllInterfaces(data: ByteArray) {
-        // Send to global broadcast 255.255.255.255
+        val sock = sendSocket ?: return
+        // 1. Global standard broadcast
         try {
             val broadcastAddr = InetAddress.getByName("255.255.255.255")
             val packet = DatagramPacket(data, data.size, broadcastAddr, DISCOVERY_PORT)
-            socket?.send(packet)
-        } catch (e: Exception) { }
+            sock.send(packet)
+        } catch (e: Exception) {
+            // ignore
+        }
 
-        // Also broadcast on each interface broadcast address for best Wi-Fi compatibility
+        // 2. Per-interface directed broadcast for multi-NIC compatibility
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
@@ -204,17 +257,23 @@ class DiscoveryManager(private val context: Context) {
                 for (interfaceAddress in networkInterface.interfaceAddresses) {
                     val bcast = interfaceAddress.broadcast
                     if (bcast != null) {
-                        val ifPacket = DatagramPacket(data, data.size, bcast, DISCOVERY_PORT)
-                        socket?.send(ifPacket)
+                        try {
+                            val ifPacket = DatagramPacket(data, data.size, bcast, DISCOVERY_PORT)
+                            sock.send(ifPacket)
+                        } catch (_: Exception) {
+                            // ignore per-interface failures
+                        }
                     }
                 }
             }
-        } catch (e: Exception) { }
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     private fun cleanupStalePeers() {
         val now = System.currentTimeMillis()
-        val staleKeys = _peers.filter { (now - it.value.lastSeen) > 6000 }.keys
+        val staleKeys = _peers.filter { (now - it.value.lastSeen) > STALE_PEER_TIMEOUT_MS }.keys
         if (staleKeys.isNotEmpty()) {
             staleKeys.forEach { _peers.remove(it) }
             _peersFlow.value = _peers.values.toList()
@@ -231,7 +290,9 @@ class DiscoveryManager(private val context: Context) {
                 while (addrs.hasMoreElements()) {
                     val addr = addrs.nextElement()
                     if (!addr.isLoopbackAddress && addr.address.size == 4) {
-                        return addr.hostAddress ?: "127.0.0.1"
+                        var host = addr.hostAddress ?: continue
+                        if (host.startsWith("::ffff:")) host = host.substring(7)
+                        return host
                     }
                 }
             }
