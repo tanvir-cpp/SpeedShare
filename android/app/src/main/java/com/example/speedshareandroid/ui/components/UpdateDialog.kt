@@ -24,6 +24,8 @@ import androidx.compose.ui.window.Dialog
 import com.example.speedshareandroid.network.UpdateInfo
 import com.example.speedshareandroid.theme.*
 
+private fun formatSize(bytes: Long): String = com.example.speedshareandroid.models.FileItem.formatBytes(bytes)
+
 @Composable
 fun UpdateDialog(
     updateInfo: UpdateInfo,
@@ -158,44 +160,73 @@ fun UpdateDialog(
                     }
                 } else {
                     // Action Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextSecondary
-                            )
-                        ) {
-                            Text(text = "Later", fontSize = 12.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.htmlUrl)).apply {
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        if (updateInfo.sha256 != null || updateInfo.apkSize > 0) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                if (updateInfo.apkSize > 0) {
+                                    Text(
+                                        text = "Size: ${formatSize(updateInfo.apkSize)}",
+                                        color = TextMuted,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.width(1.dp))
                                 }
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextPureWhite
-                            )
-                        ) {
-                            Text(text = "GitHub", fontSize = 12.sp)
+                                if (updateInfo.sha256 != null) {
+                                    Text(
+                                        text = "SHA-256 verified",
+                                        color = NeonMint,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
-
-                        Button(
-                            onClick = onUpdateNow,
-                            modifier = Modifier.weight(1.3f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(text = "Update", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPureWhite)
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = TextSecondary
+                                )
+                            ) {
+                                Text(text = "Later", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.htmlUrl)).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = TextPureWhite
+                                )
+                            ) {
+                                Text(text = "GitHub", fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = onUpdateNow,
+                                modifier = Modifier.weight(1.3f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo)
+                            ) {
+                                Text(text = "Update", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPureWhite)
+                            }
                         }
                     }
                 }

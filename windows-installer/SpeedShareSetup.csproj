@@ -9,10 +9,24 @@
     <AssemblyName>SpeedShare-Setup</AssemblyName>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- We maintain our own AssemblyInfo.cs with full metadata for
+         SmartScreen / Windows Defender. Disable the SDK's
+         auto-generation to avoid duplicate-attribute compile errors. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- We are explicitly a net10.0-windows TFM; the CA1416 analyzer
+         still warns because it doesn't propagate via the test project
+         that references us. Suppress explicitly. -->
+    <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\windows\publish\SpeedShareWindows.exe" LogicalName="Payload.SpeedShareWindows.exe" />
+    <Manifest Include="app.manifest" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
 
 </Project>

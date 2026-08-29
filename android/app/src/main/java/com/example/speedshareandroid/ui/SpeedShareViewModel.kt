@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
@@ -17,6 +18,7 @@ import com.example.speedshareandroid.network.DiscoveryManager
 import com.example.speedshareandroid.network.TransferClient
 import com.example.speedshareandroid.network.TransferServer
 import com.example.speedshareandroid.network.UpdateChecker
+import com.example.speedshareandroid.network.UpdateError
 import com.example.speedshareandroid.network.UpdateInfo
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -389,16 +391,40 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun checkForUpdates(isManual: Boolean = false) {
+        // Rate-limit auto-checks to once per 6 hours to stay well below
+        // GitHub's anonymous rate limit (60/hr per IP). Manual checks
+        // always run.
+        if (!isManual) {
+            val lastCheck = prefs.getLong("last_update_check", 0L)
+            val now = System.currentTimeMillis()
+            if (now - lastCheck < 6L * 60L * 60L * 1000L) {
+                return
+            }
+        }
         viewModelScope.launch {
             _isCheckingUpdate.value = true
             _manualUpdateMessage.value = null
-            val update = UpdateChecker.checkForUpdates(currentAppVersion)
+            prefs.edit().putLong("last_update_check", System.currentTimeMillis()).apply()
+            val result = UpdateChecker.checkForUpdates(currentAppVersion)
             _isCheckingUpdate.value = false
-            if (update != null) {
-                _updateInfo.value = update
-            } else if (isManual) {
-                _manualUpdateMessage.value = "SpeedShare v$currentAppVersion is up to date!"
-            }
+            result.fold(
+                onSuccess = { update ->
+                    // Don't re-show a dialog the user just dismissed
+                    if (_updateInfo.value == null) {
+                        _updateInfo.value = update
+                    }
+                },
+                onFailure = { err ->
+                    if (isManual) {
+                        _manualUpdateMessage.value = when (err) {
+                            is UpdateError.NoUpdate -> "SpeedShare v$currentAppVersion is up to date!"
+                            else -> "Update check failed: ${err.message ?: err::class.simpleName}"
+                        }
+                    } else if (err !is UpdateError.NoUpdate) {
+                        Log.w("UpdateChecker", "Background update check failed: ${err.message}")
+                    }
+                }
+            )
         }
     }
 
@@ -424,31 +450,42 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
 
         viewModelScope.launch {
             _updateDownloadProgress.value = 0f
-            val file = UpdateChecker.downloadApk(context, url) { progress ->
-                _updateDownloadProgress.value = progress
-            }
+            val result = UpdateChecker.downloadApk(
+                context = context,
+                downloadUrl = url,
+                expectedSize = update.apkSize,
+                sha256Url = update.sha256
+            ) { progress -> _updateDownloadProgress.value = progress }
 
-            if (file != null && file.exists()) {
-                val launched = UpdateChecker.launchApkInstaller(context, file)
-                if (launched) {
+            result.fold(
+                onSuccess = { file ->
+                    val installResult = UpdateChecker.launchApkInstaller(context, file)
+                    if (installResult.isSuccess) {
+                        _updateDownloadProgress.value = null
+                        _updateInfo.value = null
+                    } else {
+                        _updateDownloadProgress.value = null
+                        val err = installResult.exceptionOrNull()
+                        Toast.makeText(context,
+                            "Couldn't open installer: ${err?.message ?: "unknown"}. Opening browser…",
+                            Toast.LENGTH_LONG).show()
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(intent)
+                    }
+                },
+                onFailure = { err ->
                     _updateDownloadProgress.value = null
-                    _updateInfo.value = null
-                } else {
-                    _updateDownloadProgress.value = null
-                    Toast.makeText(context, "Couldn't open installer. Opening browser...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context,
+                        "Update failed: ${err.message ?: err::class.simpleName}",
+                        Toast.LENGTH_LONG).show()
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)
                 }
-            } else {
-                _updateDownloadProgress.value = null
-                Toast.makeText(context, "Download failed. Opening browser...", Toast.LENGTH_SHORT).show()
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                context.startActivity(intent)
-            }
+            )
         }
     }
 

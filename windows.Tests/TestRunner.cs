@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using SpeedShareWindows;
 using SpeedShareWindows.Models;
+using SpeedShareWindows.Services;
 
 namespace SpeedShareWindows.Tests
 {
@@ -116,6 +117,81 @@ namespace SpeedShareWindows.Tests
 
                 r.EstimatedTimeRemaining = TimeSpan.Zero;
                 if (r.FormattedEta != "Calculating...") throw new Exception(r.FormattedEta);
+            });
+
+            // -------- Version comparison --------
+
+            Test("IsNewerVersion: equal versions are not newer", () =>
+            {
+                if (UpdateCheckerService.IsNewerVersion("1.1.1", "1.1.1")) throw new Exception();
+            });
+
+            Test("IsNewerVersion: patch bump", () =>
+            {
+                if (!UpdateCheckerService.IsNewerVersion("1.1.2", "1.1.1")) throw new Exception();
+            });
+
+            Test("IsNewerVersion: minor bump", () =>
+            {
+                if (!UpdateCheckerService.IsNewerVersion("1.2.0", "1.1.5")) throw new Exception();
+            });
+
+            Test("IsNewerVersion: major bump", () =>
+            {
+                if (!UpdateCheckerService.IsNewerVersion("2.0.0", "1.99.99")) throw new Exception();
+            });
+
+            Test("IsNewerVersion: older remote is not newer", () =>
+            {
+                if (UpdateCheckerService.IsNewerVersion("1.1.0", "1.1.1")) throw new Exception();
+            });
+
+            Test("IsNewerVersion: rc tag with newer main version is still newer", () =>
+            {
+                // 1.2.0-rc1 vs 1.1.1: main is 1.2.0 vs 1.1.1, so the RC
+                // is newer than the older release, even without
+                // prerelease opt-in.
+                if (!UpdateCheckerService.IsNewerVersion("1.2.0-rc1", "1.1.1")) throw new Exception();
+            });
+
+            Test("IsNewerVersion: rc tag with same main version needs opt-in", () =>
+            {
+                // 1.1.1-rc1 vs 1.1.1 (release): a release is always
+                // newer than an RC of the same version, even without
+                // prerelease opt-in.
+                if (!UpdateCheckerService.IsNewerVersion("1.1.1", "1.1.1-rc1")) throw new Exception();
+
+                // 1.1.1-rc2 vs 1.1.1-rc1: a newer RC of the same main
+                // version is NOT newer than an older RC without
+                // opt-in, but IS newer WITH opt-in.
+                if (UpdateCheckerService.IsNewerVersion("1.1.1-rc2", "1.1.1-rc1")) throw new Exception();
+                if (!UpdateCheckerService.IsNewerVersion("1.1.1-rc2", "1.1.1-rc1", allowPrerelease: true)) throw new Exception();
+            });
+
+            Test("IsNewerVersion: release is newer than rc of same version", () =>
+            {
+                if (!UpdateCheckerService.IsNewerVersion("1.2.0", "1.2.0-rc1", allowPrerelease: true)) throw new Exception();
+            });
+
+            // -------- SHA-256 streaming hash --------
+
+            Test("SHA-256 of known data", () =>
+            {
+                var tmp = Path.Combine(Path.GetTempPath(), "speedshare_test_" + Guid.NewGuid().ToString("N") + ".bin");
+                try
+                {
+                    File.WriteAllBytes(tmp, new byte[] { 1, 2, 3, 4, 5 });
+                    // Pre-computed: SHA-256 of bytes 1,2,3,4,5
+                    var expected = "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0";
+                    using var sha = System.Security.Cryptography.SHA256.Create();
+                    var hash = sha.ComputeHash(File.ReadAllBytes(tmp));
+                    var actual = Convert.ToHexString(hash).ToLowerInvariant();
+                    if (actual != expected) throw new Exception($"expected {expected}, got {actual}");
+                }
+                finally
+                {
+                    try { File.Delete(tmp); } catch { }
+                }
             });
 
             Console.WriteLine();

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace SpeedShareSetup
@@ -101,28 +102,16 @@ namespace SpeedShareSetup
         {
             try
             {
-                string shortcutDir = Path.GetDirectoryName(shortcutPath)!;
-                if (!Directory.Exists(shortcutDir))
-                {
-                    Directory.CreateDirectory(shortcutDir);
-                }
-
-                // Use Windows Script Host COM object via dynamic reflection
-                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-                if (shellType != null)
-                {
-                    dynamic? shell = Activator.CreateInstance(shellType);
-                    if (shell != null)
-                    {
-                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                        shortcut.TargetPath = targetExePath;
-                        shortcut.WorkingDirectory = Path.GetDirectoryName(targetExePath);
-                        shortcut.Description = description;
-                        shortcut.IconLocation = $"{targetExePath},0";
-                        shortcut.Save();
-                        return;
-                    }
-                }
+                string workingDir = Path.GetDirectoryName(targetExePath) ?? "";
+                // Direct P/Invoke to the shell's IShellLink/IPersistFile
+                // interfaces. Replaces the previous WScript.Shell late-bound
+                // COM call which was a flag for AV heuristics and provided
+                // no compile-time type safety.
+                ShellLinkInterop.CreateShortcut(
+                    linkPath: shortcutPath,
+                    targetPath: targetExePath,
+                    workingDirectory: workingDir,
+                    description: description);
             }
             catch (Exception ex)
             {
@@ -170,23 +159,51 @@ namespace SpeedShareSetup
             }
         }
 
+        /// <summary>
+        /// Ask any running SpeedShare instance to exit gracefully. We
+        /// send WM_CLOSE to its main window so it can persist state
+        /// (settings, transfer history) before exiting. We fall back
+        /// to Process.Kill only if the process doesn't respond within
+        /// a short timeout, and only if it still has a window.
+        /// </summary>
         public static void KillRunningProcesses()
         {
             try
             {
+                const int WM_CLOSE = 0x0010;
                 var processes = Process.GetProcessesByName("SpeedShareWindows");
                 foreach (var p in processes)
                 {
                     try
                     {
+                        IntPtr hwnd = p.MainWindowHandle;
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            // Best-effort graceful close. The target process
+                            // is a WPF app and will receive the WM_CLOSE,
+                            // save its settings, and exit. If it's hung,
+                            // we'll fall back to Kill below.
+                            SendMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                            if (p.WaitForExit(3000)) continue;
+                        }
+                        // Either no main window (e.g. a service-like host)
+                        // or the process didn't exit in time. Kill as a
+                        // last resort.
                         p.Kill();
                         p.WaitForExit(2000);
                     }
-                    catch { }
+                    catch { /* best-effort */ }
+                    finally
+                    {
+                        p.Dispose();
+                    }
                 }
             }
             catch { }
         }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
 
         public static void RemoveShortcuts()
         {
@@ -205,38 +222,18 @@ namespace SpeedShareSetup
 
         public static void ScheduleDirectoryDeletion(string targetDir)
         {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
-                {
-                    return;
-                }
-
-                // Use ping-and-delete: write a tiny self-deleting batch file and
-                // execute it detached. ping is universally available and gives
-                // the uninstaller a moment to exit.
-                string tempBat = Path.Combine(Path.GetTempPath(), $"speedshare_uninstall_{Environment.ProcessId}.bat");
-                string quoted = "\"" + targetDir.TrimEnd('\\', '/') + "\"";
-                File.WriteAllText(tempBat,
-                    $"@echo off\r\n" +
-                    $"ping -n 3 127.0.0.1 >nul\r\n" +
-                    $"rd /s /q {quoted}\r\n" +
-                    $"del \"%~f0\"\r\n");
-
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = $"/c \"{tempBat}\"",
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    CreateNoWindow = true,
-                    UseShellExecute = true
-                };
-                Process.Start(psi);
-            }
-            catch
-            {
-                // best-effort
-            }
+            // We deliberately do NOT spawn cmd.exe or PowerShell to
+            // self-delete the install directory. That pattern is a
+            // classic heuristic flag for malware ("installer that
+            // deletes itself after running") and has no functional
+            // benefit here: the install lives in
+            // %LOCALAPPDATA%\Programs\SpeedShare which is small, and
+            // the user can remove it manually with one click if they
+            // want a truly clean uninstall. The next install of a
+            // newer version overwrites the same files in place.
+            //
+            // This is the only method that intentionally no-ops.
+            _ = targetDir;
         }
     }
 }

@@ -1,8 +1,11 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -19,9 +22,25 @@ namespace SpeedShareWindows.Services
         public string ReleaseUrl { get; set; } = string.Empty;
         public string? InstallerDownloadUrl { get; set; }
         public long InstallerSize { get; set; }
+        public string? Sha256 { get; set; }
+        public bool IsPrerelease { get; set; }
     }
 
-    public class UpdateCheckerService
+    public enum UpdateCheckResult
+    {
+        UpdateAvailable,
+        NoUpdate,
+        Failed
+    }
+
+    public sealed class UpdateCheckOutcome
+    {
+        public UpdateCheckResult Result { get; init; }
+        public UpdateInfo? Update { get; init; }
+        public string? Error { get; init; }
+    }
+
+    public static class UpdateCheckerService
     {
         public static readonly string CurrentVersion = GetCurrentVersion();
         public const string GitHubApiUrl = "https://api.github.com/repos/tanvir-cpp/SpeedShare/releases/latest";
@@ -54,59 +73,139 @@ namespace SpeedShareWindows.Services
                 new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
         }
 
-        public static async Task<UpdateInfo?> CheckForUpdatesAsync()
+        /// <summary>
+        /// Compare two semver-ish version strings. Prerelease tags
+        /// ("1.2.0-rc1") are NOT considered newer than the same release
+        /// version unless <paramref name="allowPrerelease"/> is true.
+        /// </summary>
+        public static bool IsNewerVersion(string remoteVer, string localVer, bool allowPrerelease = false)
+        {
+            if (string.Equals(remoteVer, localVer, StringComparison.OrdinalIgnoreCase)) return false;
+            var (rMain, rPre) = SplitPrerelease(remoteVer);
+            var (lMain, lPre) = SplitPrerelease(localVer);
+            var cmp = CompareMain(rMain, lMain);
+            if (cmp != 0) return cmp > 0;
+            if (rPre == null && lPre == null) return false;
+            if (rPre == null) return true;
+            if (lPre == null) return false;
+            if (!allowPrerelease) return false;
+            return string.Compare(rPre, lPre, StringComparison.OrdinalIgnoreCase) > 0;
+        }
+
+        private static (string Main, string? Pre) SplitPrerelease(string v)
+        {
+            var dash = v.IndexOf('-');
+            return dash < 0 ? (v, null) : (v.Substring(0, dash), v.Substring(dash + 1));
+        }
+
+        private static int CompareMain(string a, string b)
+        {
+            var ap = a.Split('.');
+            var bp = b.Split('.');
+            int len = Math.Max(ap.Length, bp.Length);
+            for (int i = 0; i < len; i++)
+            {
+                int x = i < ap.Length ? (int.TryParse(ap[i], out var xi) ? xi : 0) : 0;
+                int y = i < bp.Length ? (int.TryParse(bp[i], out var yi) ? yi : 0) : 0;
+                if (x != y) return x - y;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Check the latest GitHub release. Never throws; returns an
+        /// UpdateCheckOutcome instead so the UI can render a useful
+        /// message instead of swallowing exceptions.
+        /// </summary>
+        public static async Task<UpdateCheckOutcome> CheckForUpdatesAsync()
         {
             try
             {
                 var response = await _httpClient.GetAsync(GitHubApiUrl);
                 if (!response.IsSuccessStatusCode)
                 {
-                    return null;
+                    return new UpdateCheckOutcome
+                    {
+                        Result = UpdateCheckResult.Failed,
+                        Error = $"GitHub returned HTTP {(int)response.StatusCode}"
+                    };
                 }
-
                 var json = await response.Content.ReadAsStringAsync();
                 var release = JsonSerializer.Deserialize<GitHubReleaseResponse>(json);
                 if (release == null || string.IsNullOrWhiteSpace(release.TagName))
                 {
-                    return null;
+                    return new UpdateCheckOutcome { Result = UpdateCheckResult.NoUpdate };
                 }
 
+                var isPrerelease = release.Prerelease;
                 var cleanTag = release.TagName.TrimStart('v', 'V');
-                if (IsNewerVersion(cleanTag, CurrentVersion))
+                if (!IsNewerVersion(cleanTag, CurrentVersion, allowPrerelease: false) ||
+                    (isPrerelease && !IsNewerVersion(cleanTag, CurrentVersion, allowPrerelease: true)))
                 {
-                    string? installerUrl = null;
-                    long installerSize = 0;
+                    return new UpdateCheckOutcome { Result = UpdateCheckResult.NoUpdate };
+                }
 
-                    if (release.Assets != null)
+                string? installerUrl = null;
+                long installerSize = 0;
+                string? sha256Url = null;
+
+                if (release.Assets != null)
+                {
+                    // First pass: pick the .exe (preferring *-Setup.exe).
+                    foreach (var asset in release.Assets)
                     {
-                        // First pass: prefer SpeedShare-Setup.exe
+                        if (asset.Name != null &&
+                            asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                            asset.Name.Contains("Setup", StringComparison.OrdinalIgnoreCase))
+                        {
+                            installerUrl = asset.BrowserDownloadUrl;
+                            installerSize = asset.Size;
+                            break;
+                        }
+                    }
+                    if (installerUrl == null)
+                    {
                         foreach (var asset in release.Assets)
                         {
-                            if (asset.Name != null &&
-                                asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                                asset.Name.Contains("Setup", StringComparison.OrdinalIgnoreCase))
+                            if (asset.Name != null && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                             {
                                 installerUrl = asset.BrowserDownloadUrl;
                                 installerSize = asset.Size;
                                 break;
                             }
                         }
-                        // Second pass: any .exe
-                        if (installerUrl == null)
+                    }
+                    // Second pass: pick a sidecar .sha256 for the chosen asset.
+                    if (installerUrl != null)
+                    {
+                        var installerName = installerUrl.Substring(installerUrl.LastIndexOf('/') + 1);
+                        foreach (var asset in release.Assets)
                         {
-                            foreach (var asset in release.Assets)
+                            if (asset.Name != null &&
+                                asset.Name.Equals(installerName + ".sha256", StringComparison.OrdinalIgnoreCase))
                             {
-                                if (asset.Name != null && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    installerUrl = asset.BrowserDownloadUrl;
-                                    installerSize = asset.Size;
-                                    break;
-                                }
+                                sha256Url = asset.BrowserDownloadUrl;
+                                break;
                             }
                         }
                     }
+                }
 
-                    return new UpdateInfo
+                string? expectedSha256 = null;
+                if (sha256Url != null)
+                {
+                    try
+                    {
+                        var sha = await _httpClient.GetStringAsync(sha256Url);
+                        expectedSha256 = sha.Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    }
+                    catch { /* hash verification is best-effort */ }
+                }
+
+                return new UpdateCheckOutcome
+                {
+                    Result = UpdateCheckResult.UpdateAvailable,
+                    Update = new UpdateInfo
                     {
                         VersionTag = release.TagName,
                         CleanVersion = cleanTag,
@@ -114,34 +213,38 @@ namespace SpeedShareWindows.Services
                         Changelog = release.Body ?? "A new update is available on GitHub with performance improvements and bug fixes.",
                         ReleaseUrl = release.HtmlUrl ?? ReleasesWebUrl,
                         InstallerDownloadUrl = installerUrl,
-                        InstallerSize = installerSize
-                    };
-                }
+                        InstallerSize = installerSize,
+                        Sha256 = expectedSha256,
+                        IsPrerelease = isPrerelease
+                    }
+                };
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[UpdateChecker] Error checking GitHub: {ex.Message}");
+                return new UpdateCheckOutcome
+                {
+                    Result = UpdateCheckResult.Failed,
+                    Error = ex.Message
+                };
             }
-
-            return null;
         }
 
-        public static bool IsNewerVersion(string remoteVer, string localVer)
-        {
-            if (Version.TryParse(remoteVer, out var remote) && Version.TryParse(localVer, out var local))
-            {
-                return remote > local;
-            }
-
-            // Fallback string compare
-            return string.Compare(remoteVer, localVer, StringComparison.OrdinalIgnoreCase) > 0;
-        }
-
-        public static async Task<string> DownloadInstallerAsync(string downloadUrl, IProgress<double>? progress = null, CancellationToken ct = default)
+        /// <summary>
+        /// Download the installer, verify its size and SHA-256, and
+        /// return the path. Throws on any verification failure so
+        /// the UI can show an explicit error.
+        /// </summary>
+        public static async Task<string> DownloadInstallerAsync(
+            string downloadUrl,
+            long expectedSize,
+            string? expectedSha256 = null,
+            IProgress<double>? progress = null,
+            CancellationToken ct = default)
         {
             var tempPath = Path.Combine(Path.GetTempPath(), "SpeedShare-Setup-Update.exe");
 
-            // Follow redirects manually up to 5 hops
+            // Follow up to 5 redirects manually
             string url = downloadUrl;
             HttpResponseMessage? response = null;
             for (int redirect = 0; redirect < 5; redirect++)
@@ -159,30 +262,57 @@ namespace SpeedShareWindows.Services
                 }
                 break;
             }
-
             if (response == null) throw new HttpRequestException("No response received.");
             response.EnsureSuccessStatusCode();
 
+            // Write to a temp file first, then rename, so a partially-downloaded
+            // file from a previous run doesn't pollute the verification step.
+            var tempPathInProgress = tempPath + ".part";
+
             var totalBytes = response.Content.Headers.ContentLength ?? -1L;
-            await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            await using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
-
-            var buffer = new byte[81920];
             long totalRead = 0;
-            int bytesRead;
-
-            while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
+            using (var sha = SHA256.Create())
             {
-                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                totalRead += bytesRead;
-
-                if (totalBytes > 0 && progress != null)
+                await using (var contentStream = await response.Content.ReadAsStreamAsync(ct))
+                await using (var fileStream = new FileStream(tempPathInProgress, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
                 {
-                    progress.Report((double)totalRead / totalBytes * 100.0);
+                    var buffer = new byte[81920];
+                    int bytesRead;
+                    while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
+                    {
+                        sha.TransformBlock(buffer, 0, bytesRead, null, 0);
+                        await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                        totalRead += bytesRead;
+                        if (totalBytes > 0 && progress != null)
+                        {
+                            progress.Report((double)totalRead / totalBytes * 100.0);
+                        }
+                    }
                 }
-            }
+                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                var actualHash = Convert.ToHexString(sha.Hash ?? Array.Empty<byte>()).ToLowerInvariant();
 
-            return tempPath;
+                // Size check
+                if (expectedSize > 0 && totalRead != expectedSize)
+                {
+                    try { File.Delete(tempPathInProgress); } catch { }
+                    throw new InvalidDataException(
+                        $"Installer size mismatch (expected {expectedSize}, got {totalRead}).");
+                }
+
+                // Hash check
+                if (!string.IsNullOrEmpty(expectedSha256) &&
+                    !string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(tempPathInProgress); } catch { }
+                    throw new InvalidDataException(
+                        $"Installer SHA-256 mismatch (expected {expectedSha256}, got {actualHash}).");
+                }
+
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+                File.Move(tempPathInProgress, tempPath);
+                return tempPath;
+            }
         }
 
         public static void LaunchInstallerAndExit(string installerPath)
@@ -200,8 +330,6 @@ namespace SpeedShareWindows.Services
                 Debug.WriteLine($"[UpdateChecker] Failed to launch installer: {ex.Message}");
                 return;
             }
-
-            // Schedule shutdown on the UI thread if we can; otherwise just exit.
             try
             {
                 var app = System.Windows.Application.Current;
@@ -229,6 +357,9 @@ namespace SpeedShareWindows.Services
 
             [JsonPropertyName("html_url")]
             public string? HtmlUrl { get; set; }
+
+            [JsonPropertyName("prerelease")]
+            public bool Prerelease { get; set; }
 
             [JsonPropertyName("assets")]
             public GitHubAsset[]? Assets { get; set; }

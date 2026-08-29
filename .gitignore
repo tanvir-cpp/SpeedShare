@@ -15,6 +15,9 @@ release-artifacts/
 windows.Tests/bin/
 windows.Tests/obj/
 
+# Release staging area (built by the local pipeline; not committed)
+dist/
+
 # Android / Gradle
 .gradle/
 android/.gradle/

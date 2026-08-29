@@ -64,6 +64,8 @@ namespace SpeedShareWindows
         }
 
         private UpdateInfo? _availableUpdate;
+        private DateTime _lastUpdateCheckUtc = DateTime.MinValue;
+        private static readonly TimeSpan AutoCheckInterval = TimeSpan.FromHours(6);
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -99,16 +101,17 @@ namespace SpeedShareWindows
 
         private async Task TriggerAutoUpdateCheckAsync()
         {
-            try
+            // Rate-limit auto-checks to once per 6 hours.
+            if (DateTime.UtcNow - _lastUpdateCheckUtc < AutoCheckInterval) return;
+            // Defer until the window has actually rendered and isn't being closed.
+            await Task.Delay(2000);
+            if (!IsLoaded || !IsVisible) return;
+            _lastUpdateCheckUtc = DateTime.UtcNow;
+            var outcome = await UpdateCheckerService.CheckForUpdatesAsync();
+            if (this.IsLoaded && outcome.Result == UpdateCheckResult.UpdateAvailable && outcome.Update != null)
             {
-                await Task.Delay(2000); // Brief delay so window renders first
-                var update = await UpdateCheckerService.CheckForUpdatesAsync();
-                if (update != null)
-                {
-                    Dispatcher.Invoke(() => ShowUpdateModal(update));
-                }
+                Dispatcher.Invoke(() => ShowUpdateModal(outcome.Update!));
             }
-            catch { }
         }
 
         private void ShowUpdateModal(UpdateInfo update)
@@ -641,29 +644,32 @@ namespace SpeedShareWindows
 
         private async void BtnCheckUpdateManual_Click(object sender, RoutedEventArgs e)
         {
+            BtnCheckUpdateManual.IsEnabled = false;
+            TxtSettingsUpdateStatus.Text = "Checking GitHub Releases…";
+            TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonCyan");
+
+            var outcome = await UpdateCheckerService.CheckForUpdatesAsync();
+            _lastUpdateCheckUtc = DateTime.UtcNow;
+
             try
             {
-                BtnCheckUpdateManual.IsEnabled = false;
-                TxtSettingsUpdateStatus.Text = "Checking GitHub Releases...";
-                TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonCyan");
-
-                var update = await UpdateCheckerService.CheckForUpdatesAsync();
-                if (update != null)
+                switch (outcome.Result)
                 {
-                    TxtSettingsUpdateStatus.Text = $"Update {update.VersionTag} is available!";
-                    TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
-                    ShowUpdateModal(update);
+                    case UpdateCheckResult.UpdateAvailable:
+                        TxtSettingsUpdateStatus.Text = $"Update {outcome.Update!.VersionTag} is available!";
+                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
+                        ShowUpdateModal(outcome.Update);
+                        break;
+                    case UpdateCheckResult.NoUpdate:
+                        TxtSettingsUpdateStatus.Text = $"SpeedShare v{UpdateCheckerService.CurrentVersion} is up to date!";
+                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
+                        break;
+                    case UpdateCheckResult.Failed:
+                    default:
+                        TxtSettingsUpdateStatus.Text = $"Check failed: {outcome.Error ?? "unknown error"}";
+                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonRose");
+                        break;
                 }
-                else
-                {
-                    TxtSettingsUpdateStatus.Text = $"SpeedShare v{UpdateCheckerService.CurrentVersion} is up to date!";
-                    TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
-                }
-            }
-            catch (Exception ex)
-            {
-                TxtSettingsUpdateStatus.Text = $"Check failed: {ex.Message}";
-                TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonRose");
             }
             finally
             {
@@ -693,12 +699,22 @@ namespace SpeedShareWindows
         private async void BtnUpdateNow_Click(object sender, RoutedEventArgs e)
         {
             if (_availableUpdate == null) return;
-
             if (string.IsNullOrEmpty(_availableUpdate.InstallerDownloadUrl))
             {
-                // Fallback to browser
                 BtnViewRelease_Click(sender, e);
                 return;
+            }
+
+            // Size confirmation: prevent surprise downloads on metered links.
+            if (_availableUpdate.InstallerSize > 0)
+            {
+                var sizeMB = _availableUpdate.InstallerSize / 1024.0 / 1024.0;
+                var confirm = MessageBox.Show(
+                    $"SpeedShare v{_availableUpdate.VersionTag} is {sizeMB:F1} MB. Download and install now?",
+                    "Confirm Update",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
             }
 
             try
@@ -714,9 +730,13 @@ namespace SpeedShareWindows
                     TxtUpdateProgressPercent.Text = $"{percent:F0}%";
                 });
 
-                var installerPath = await UpdateCheckerService.DownloadInstallerAsync(_availableUpdate.InstallerDownloadUrl, progress);
+                var installerPath = await UpdateCheckerService.DownloadInstallerAsync(
+                    _availableUpdate.InstallerDownloadUrl,
+                    _availableUpdate.InstallerSize,
+                    _availableUpdate.Sha256,
+                    progress);
 
-                TxtUpdateProgressPercent.Text = "Launching installer...";
+                TxtUpdateProgressPercent.Text = "Launching installer…";
                 await Task.Delay(500);
 
                 UpdateCheckerService.LaunchInstallerAndExit(installerPath);
@@ -725,7 +745,11 @@ namespace SpeedShareWindows
             {
                 UpdateProgressPanel.Visibility = Visibility.Collapsed;
                 UpdateActionButtons.Visibility = Visibility.Visible;
-                MessageBox.Show($"Failed to download update installer: {ex.Message}\nOpening release page in browser instead.", "Update Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(
+                    $"Failed to download update installer: {ex.Message}\n\nOpening release page in browser instead.",
+                    "Update Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
                 BtnViewRelease_Click(sender, e);
             }
         }

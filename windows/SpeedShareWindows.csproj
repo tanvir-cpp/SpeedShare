@@ -9,11 +9,21 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- We maintain our own AssemblyInfo.cs with full metadata for
+         SmartScreen / Windows Defender. Disable the SDK's
+         auto-generation to avoid duplicate-attribute compile errors. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="app.ico" />
     <Resource Include="app_icon.png" />
+    <Manifest Include="app.manifest" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
 
 </Project>

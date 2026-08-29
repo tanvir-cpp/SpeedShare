@@ -1,5 +1,9 @@
 <Project>
   <PropertyGroup>
+    <!--
+      Source of truth: ../VERSION. When bumping, also update the
+      Windows app/installer app.manifest assemblyIdentity version.
+    -->
     <SpeedShareVersion>$([System.IO.File]::ReadAllText("$(MSBuildThisFileDirectory)VERSION").Trim())</SpeedShareVersion>
     <Version>$(SpeedShareVersion)</Version>
     <AssemblyVersion>$(SpeedShareVersion).0</AssemblyVersion>
