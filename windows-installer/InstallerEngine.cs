@@ -35,23 +35,20 @@ namespace SpeedShareSetup
             }
 
             var assembly = Assembly.GetExecutingAssembly();
-            string[] embeddedFiles = new[]
-            {
-                "Payload.SpeedShareWindows.exe",
-                "Payload.SpeedShareWindows.dll",
-                "Payload.SpeedShareWindows.runtimeconfig.json",
-                "Payload.SpeedShareWindows.deps.json"
-            };
+            var resourceNames = assembly.GetManifestResourceNames();
 
-            foreach (var resourceName in embeddedFiles)
+            foreach (var resourceName in resourceNames)
             {
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-                if (stream != null)
+                if (resourceName.StartsWith("Payload.", StringComparison.OrdinalIgnoreCase))
                 {
-                    string targetFileName = resourceName.Replace("Payload.", "");
-                    string targetFilePath = Path.Combine(targetDir, targetFileName);
-                    using var fileStream = new FileStream(targetFilePath, FileMode.Create, FileAccess.Write);
-                    stream.CopyTo(fileStream);
+                    using var stream = assembly.GetManifestResourceStream(resourceName);
+                    if (stream != null)
+                    {
+                        string targetFileName = resourceName.Substring("Payload.".Length);
+                        string targetFilePath = Path.Combine(targetDir, targetFileName);
+                        using var fileStream = new FileStream(targetFilePath, FileMode.Create, FileAccess.Write);
+                        stream.CopyTo(fileStream);
+                    }
                 }
             }
 

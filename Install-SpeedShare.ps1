@@ -12,9 +12,9 @@ Write-Host "=========================================" -ForegroundColor Cyan
 $InstallDir = "$env:LOCALAPPDATA\Programs\SpeedShare"
 $SourceDir = "$PSScriptRoot\windows\publish"
 
-if (-not (Test-Path $SourceDir)) {
+if (-not (Test-Path "$SourceDir\SpeedShareWindows.exe")) {
     Write-Host "[*] Building latest release binaries..." -ForegroundColor Yellow
-    dotnet publish "$PSScriptRoot\windows\SpeedShareWindows.csproj" -c Release -r win-x64 --self-contained false -o "$SourceDir" | Out-Null
+    dotnet publish "$PSScriptRoot\windows\SpeedShareWindows.csproj" -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o "$SourceDir" | Out-Null
 }
 
 Write-Host "[1/4] Stopping any existing SpeedShare processes..." -ForegroundColor Gray
@@ -25,6 +25,9 @@ if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 Copy-Item -Path "$SourceDir\*" -Destination $InstallDir -Recurse -Force
+if (Test-Path "$PSScriptRoot\Uninstall-SpeedShare.ps1") {
+    Copy-Item -Path "$PSScriptRoot\Uninstall-SpeedShare.ps1" -Destination "$InstallDir\Uninstall-SpeedShare.ps1" -Force
+}
 
 Write-Host "[3/4] Creating Desktop and Start Menu shortcuts..." -ForegroundColor Gray
 $WshShell = New-Object -ComObject WScript.Shell
@@ -56,7 +59,7 @@ Set-ItemProperty -Path $RegKey -Name "DisplayName" -Value "SpeedShare"
 Set-ItemProperty -Path $RegKey -Name "DisplayVersion" -Value "1.1.0"
 Set-ItemProperty -Path $RegKey -Name "Publisher" -Value "SpeedShare Team"
 Set-ItemProperty -Path $RegKey -Name "InstallLocation" -Value $InstallDir
-Set-ItemProperty -Path $RegKey -Name "UninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$PSScriptRoot\Uninstall-SpeedShare.ps1`""
+Set-ItemProperty -Path $RegKey -Name "UninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$InstallDir\Uninstall-SpeedShare.ps1`""
 Set-ItemProperty -Path $RegKey -Name "DisplayIcon" -Value "$TargetExe,0"
 Set-ItemProperty -Path $RegKey -Name "EstimatedSize" -Value 512 -Type DWord
 Set-ItemProperty -Path $RegKey -Name "NoModify" -Value 1 -Type DWord

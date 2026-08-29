@@ -103,6 +103,10 @@ namespace SpeedShareSetup
 
         private async Task PerformInstallAsync()
         {
+            bool createDesktopShortcut = ChkDesktopShortcut.IsChecked == true;
+            bool createStartMenuShortcut = ChkStartMenuShortcut.IsChecked == true;
+            bool launchOnFinish = ChkLaunchOnFinish.IsChecked == true;
+
             InstallConfigPanel.Visibility = Visibility.Collapsed;
             ProgressPanel.Visibility = Visibility.Visible;
             BtnMainAction.IsEnabled = false;
@@ -119,11 +123,11 @@ namespace SpeedShareSetup
             string mainExe = Path.Combine(_targetDir, "SpeedShareWindows.exe");
             await Task.Run(() =>
             {
-                if (ChkDesktopShortcut.IsChecked == true)
+                if (createDesktopShortcut)
                 {
                     InstallerEngine.CreateShortcut(mainExe, InstallerEngine.DesktopShortcutPath, "SpeedShare - Ultra Fast Local Transfer");
                 }
-                if (ChkStartMenuShortcut.IsChecked == true)
+                if (createStartMenuShortcut)
                 {
                     InstallerEngine.CreateShortcut(mainExe, InstallerEngine.StartMenuShortcutPath, "SpeedShare - Ultra Fast Local Transfer");
                 }
@@ -138,7 +142,7 @@ namespace SpeedShareSetup
             FinishedPanel.Visibility = Visibility.Visible;
             _isFinished = true;
             BtnMainAction.IsEnabled = true;
-            BtnMainAction.Content = ChkLaunchOnFinish.IsChecked == true ? "Launch SpeedShare" : "Finish";
+            BtnMainAction.Content = launchOnFinish ? "Launch SpeedShare" : "Finish";
         }
 
         private async Task PerformUninstallAsync()
