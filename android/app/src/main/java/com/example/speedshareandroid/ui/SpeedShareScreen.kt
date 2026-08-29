@@ -36,6 +36,7 @@ import com.example.speedshareandroid.models.FileItem
 import com.example.speedshareandroid.theme.*
 import com.example.speedshareandroid.ui.components.QuickCategoryDeck
 import com.example.speedshareandroid.ui.components.RadarHero
+import com.example.speedshareandroid.ui.components.UpdateDialog
 import com.example.speedshareandroid.ui.screens.HistoryScreen
 import com.example.speedshareandroid.ui.screens.SettingsScreen
 
@@ -53,6 +54,8 @@ fun SpeedShareScreen(
     val isTransferring by viewModel.isTransferring.collectAsState()
     val transferProgress by viewModel.transferProgress.collectAsState()
     val statusDialog by viewModel.transferStatusDialog.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
+    val updateDownloadProgress by viewModel.updateDownloadProgress.collectAsState()
 
     var activePickerMime by remember { mutableStateOf("*/*") }
 
@@ -512,6 +515,17 @@ fun SpeedShareScreen(
                     Text("OK", color = TextPureWhite, fontWeight = FontWeight.Bold)
                 }
             }
+        )
+    }
+
+    // Modal 4: Auto-Update Dialog
+    updateInfo?.let { info ->
+        UpdateDialog(
+            updateInfo = info,
+            currentVersion = viewModel.currentAppVersion,
+            downloadProgress = updateDownloadProgress,
+            onDismiss = { viewModel.dismissUpdateDialog() },
+            onUpdateNow = { viewModel.startUpdateDownload() }
         )
     }
 }

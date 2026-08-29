@@ -515,7 +515,7 @@
                                  BorderBrush="{StaticResource BorderGlass}" Padding="10,8" FontSize="13" Margin="0,0,0,14"/>
 
                         <TextBlock Text="Downloads Folder" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                        <Grid Margin="0,0,0,20">
+                        <Grid Margin="0,0,0,16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -526,6 +526,23 @@
                                     Background="{StaticResource BgCardHover}" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1"
                                     Foreground="{StaticResource TextPureWhite}" Padding="12,8" Cursor="Hand"/>
                         </Grid>
+
+                        <!-- Updates Check in Settings -->
+                        <Border Background="{StaticResource BgMidnight}" CornerRadius="10" Padding="12,10" Margin="0,0,0,20" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="SpeedShare v1.1.0" Foreground="{StaticResource TextPureWhite}" FontSize="12" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="TxtSettingsUpdateStatus" Text="Check for newer versions" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" x:Name="BtnCheckUpdateManual" Click="BtnCheckUpdateManual_Click" Content="Check Now"
+                                        Background="{StaticResource BgCardHover}" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1"
+                                        Foreground="{StaticResource NeonCyan}" Padding="10,6" FontSize="11" FontWeight="SemiBold" Cursor="Hand"/>
+                            </Grid>
+                        </Border>
 
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -538,6 +555,71 @@
                                     Foreground="{StaticResource TextSecondary}" Padding="12,8" Cursor="Hand"/>
                             <Button Grid.Column="2" Click="BtnSaveSettings_Click" Content="Save"
                                     Background="{StaticResource NeonIndigo}" Foreground="{StaticResource TextPureWhite}" FontWeight="Bold" Padding="12,8" Cursor="Hand"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- =================== MODAL 4: AUTO-UPDATE =================== -->
+            <Grid x:Name="UpdateModal" Visibility="Collapsed" Background="#D907090E">
+                <Border Background="{StaticResource BgCard}" CornerRadius="20" BorderBrush="{StaticResource NeonCyan}" BorderThickness="1.5"
+                        Width="480" VerticalAlignment="Center" HorizontalAlignment="Center" Padding="26">
+                    <StackPanel>
+                        <!-- Header & Version Tags -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12" Background="#181C27" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1" Margin="0,0,12,0">
+                                <TextBlock Text="🚀" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="New Update Available!" Foreground="{StaticResource TextPureWhite}" FontWeight="Bold" FontSize="17"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock x:Name="TxtUpdateNewVersion" Text="v1.2.0" Foreground="{StaticResource NeonMint}" FontWeight="Bold" FontSize="12"/>
+                                    <TextBlock Text=" • Current: v1.1.0" Foreground="{StaticResource TextMuted}" FontSize="12"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="RELEASE NOTES" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <Border Background="{StaticResource BgMidnight}" CornerRadius="10" Padding="12" Margin="0,0,0,16" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1" MaxHeight="140">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock x:Name="TxtUpdateChangelog" Text="Loading changelog..." Foreground="{StaticResource TextSecondary}" FontSize="12" TextWrapping="Wrap" LineHeight="18"/>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Download Progress Bar (visible during download) -->
+                        <StackPanel x:Name="UpdateProgressPanel" Visibility="Collapsed" Margin="0,0,0,14">
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Downloading update..." Foreground="{StaticResource NeonCyan}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtUpdateProgressPercent" Text="0%" Foreground="{StaticResource TextPureWhite}" FontSize="12"/>
+                            </Grid>
+                            <ProgressBar x:Name="UpdateProgressBar" Height="8" Minimum="0" Maximum="100" Value="0" Foreground="{StaticResource NeonCyan}" Background="{StaticResource BgMidnight}"/>
+                        </StackPanel>
+
+                        <!-- Action Buttons -->
+                        <Grid x:Name="UpdateActionButtons">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Click="BtnDismissUpdate_Click" Content="Later"
+                                    Background="{StaticResource BgCardHover}" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1"
+                                    Foreground="{StaticResource TextSecondary}" Padding="10,8" Cursor="Hand"/>
+                            <Button Grid.Column="2" Click="BtnViewRelease_Click" Content="GitHub"
+                                    Background="{StaticResource BgCardHover}" BorderBrush="{StaticResource BorderGlass}" BorderThickness="1"
+                                    Foreground="{StaticResource TextPureWhite}" Padding="10,8" Cursor="Hand"/>
+                            <Button Grid.Column="4" x:Name="BtnUpdateNow" Click="BtnUpdateNow_Click" Content="Update Now"
+                                    Background="{StaticResource NeonIndigo}" Foreground="{StaticResource TextPureWhite}" FontWeight="Bold" Padding="10,8" Cursor="Hand"/>
                         </Grid>
                     </StackPanel>
                 </Border>

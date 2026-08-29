@@ -14,6 +14,7 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using SpeedShareWindows.Models;
 using SpeedShareWindows.Network;
+using SpeedShareWindows.Services;
 
 namespace SpeedShareWindows
 {
@@ -57,6 +58,8 @@ namespace SpeedShareWindows
             Closing += MainWindow_Closing;
         }
 
+        private UpdateInfo? _availableUpdate;
+
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             string localIp = GetLocalIpAddress();
@@ -66,6 +69,34 @@ namespace SpeedShareWindows
 
             _transferServer.Start();
             _discoveryService.Start();
+
+            // Background check for updates from GitHub
+            _ = TriggerAutoUpdateCheckAsync();
+        }
+
+        private async Task TriggerAutoUpdateCheckAsync()
+        {
+            try
+            {
+                await Task.Delay(2000); // Brief delay so window renders first
+                var update = await UpdateCheckerService.CheckForUpdatesAsync();
+                if (update != null)
+                {
+                    Dispatcher.Invoke(() => ShowUpdateModal(update));
+                }
+            }
+            catch { }
+        }
+
+        private void ShowUpdateModal(UpdateInfo update)
+        {
+            _availableUpdate = update;
+            TxtUpdateNewVersion.Text = update.VersionTag;
+            TxtUpdateChangelog.Text = update.Changelog;
+            UpdateProgressPanel.Visibility = Visibility.Collapsed;
+            UpdateActionButtons.Visibility = Visibility.Visible;
+            BtnUpdateNow.IsEnabled = true;
+            UpdateModal.Visibility = Visibility.Visible;
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -552,6 +583,97 @@ namespace SpeedShareWindows
 
             SettingsModal.Visibility = Visibility.Collapsed;
             _ = _discoveryService.BroadcastBeaconAsync();
+        }
+
+        private async void BtnCheckUpdateManual_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                BtnCheckUpdateManual.IsEnabled = false;
+                TxtSettingsUpdateStatus.Text = "Checking GitHub Releases...";
+                TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonCyan");
+
+                var update = await UpdateCheckerService.CheckForUpdatesAsync();
+                if (update != null)
+                {
+                    TxtSettingsUpdateStatus.Text = $"Update {update.VersionTag} is available!";
+                    TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
+                    ShowUpdateModal(update);
+                }
+                else
+                {
+                    TxtSettingsUpdateStatus.Text = $"SpeedShare v{UpdateCheckerService.CurrentVersion} is up to date!";
+                    TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
+                }
+            }
+            catch (Exception ex)
+            {
+                TxtSettingsUpdateStatus.Text = $"Check failed: {ex.Message}";
+                TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonRose");
+            }
+            finally
+            {
+                BtnCheckUpdateManual.IsEnabled = true;
+            }
+        }
+
+        private void BtnDismissUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            UpdateModal.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnViewRelease_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var url = _availableUpdate?.ReleaseUrl ?? UpdateCheckerService.ReleasesWebUrl;
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        }
+
+        private async void BtnUpdateNow_Click(object sender, RoutedEventArgs e)
+        {
+            if (_availableUpdate == null) return;
+
+            if (string.IsNullOrEmpty(_availableUpdate.InstallerDownloadUrl))
+            {
+                // Fallback to browser
+                BtnViewRelease_Click(sender, e);
+                return;
+            }
+
+            try
+            {
+                UpdateActionButtons.Visibility = Visibility.Collapsed;
+                UpdateProgressPanel.Visibility = Visibility.Visible;
+                UpdateProgressBar.Value = 0;
+                TxtUpdateProgressPercent.Text = "0%";
+
+                var progress = new Progress<double>(percent =>
+                {
+                    UpdateProgressBar.Value = percent;
+                    TxtUpdateProgressPercent.Text = $"{percent:F0}%";
+                });
+
+                var installerPath = await UpdateCheckerService.DownloadInstallerAsync(_availableUpdate.InstallerDownloadUrl, progress);
+
+                TxtUpdateProgressPercent.Text = "Launching installer...";
+                await Task.Delay(500);
+
+                UpdateCheckerService.LaunchInstallerAndExit(installerPath);
+            }
+            catch (Exception ex)
+            {
+                UpdateProgressPanel.Visibility = Visibility.Collapsed;
+                UpdateActionButtons.Visibility = Visibility.Visible;
+                MessageBox.Show($"Failed to download update installer: {ex.Message}\nOpening release page in browser instead.", "Update Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                BtnViewRelease_Click(sender, e);
+            }
         }
 
         #endregion

@@ -15,6 +15,8 @@ import com.example.speedshareandroid.models.*
 import com.example.speedshareandroid.network.DiscoveryManager
 import com.example.speedshareandroid.network.TransferClient
 import com.example.speedshareandroid.network.TransferServer
+import com.example.speedshareandroid.network.UpdateChecker
+import com.example.speedshareandroid.network.UpdateInfo
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -24,6 +26,8 @@ enum class AppTab {
 }
 
 class SpeedShareViewModel(application: Application) : AndroidViewModel(application) {
+
+    val currentAppVersion = "1.1.0"
 
     private val context: Context get() = getApplication<Application>().applicationContext
     private val prefs = context.getSharedPreferences("speedshare_prefs", Context.MODE_PRIVATE)
@@ -55,6 +59,19 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _transferStatusDialog = MutableStateFlow<Pair<Boolean, String?>?>(null)
     val transferStatusDialog: StateFlow<Pair<Boolean, String?>?> = _transferStatusDialog.asStateFlow()
+
+    // Auto-Update State
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _updateDownloadProgress = MutableStateFlow<Float?>(null)
+    val updateDownloadProgress: StateFlow<Float?> = _updateDownloadProgress.asStateFlow()
+
+    private val _manualUpdateMessage = MutableStateFlow<String?>(null)
+    val manualUpdateMessage: StateFlow<String?> = _manualUpdateMessage.asStateFlow()
 
     // History Tab Filter & Search
     val allHistoryRecords = historyRepository.records
@@ -112,6 +129,9 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
                 _transferStatusDialog.value = result
             }
         }
+
+        // Check for updates on startup
+        checkForUpdates(isManual = false)
     }
 
     fun selectTab(tab: AppTab) {
@@ -291,6 +311,61 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
             prefs.edit().putString("device_name", trimmed).apply()
             discoveryManager.deviceName = trimmed
             discoveryManager.broadcastBeacon()
+        }
+    }
+
+    fun checkForUpdates(isManual: Boolean = false) {
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            _manualUpdateMessage.value = null
+            val update = UpdateChecker.checkForUpdates(currentAppVersion)
+            _isCheckingUpdate.value = false
+            if (update != null) {
+                _updateInfo.value = update
+            } else if (isManual) {
+                _manualUpdateMessage.value = "SpeedShare v$currentAppVersion is up to date!"
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _updateInfo.value = null
+        _updateDownloadProgress.value = null
+    }
+
+    fun clearManualUpdateMessage() {
+        _manualUpdateMessage.value = null
+    }
+
+    fun startUpdateDownload() {
+        val update = _updateInfo.value ?: return
+        val url = update.apkDownloadUrl
+        if (url.isNullOrEmpty()) {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+            return
+        }
+
+        viewModelScope.launch {
+            _updateDownloadProgress.value = 0f
+            val file = UpdateChecker.downloadApk(context, url) { progress ->
+                _updateDownloadProgress.value = progress
+            }
+
+            if (file != null && file.exists()) {
+                _updateDownloadProgress.value = null
+                _updateInfo.value = null
+                UpdateChecker.launchApkInstaller(context, file)
+            } else {
+                _updateDownloadProgress.value = null
+                Toast.makeText(context, "Download failed. Opening browser...", Toast.LENGTH_SHORT).show()
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl)).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+            }
         }
     }
 

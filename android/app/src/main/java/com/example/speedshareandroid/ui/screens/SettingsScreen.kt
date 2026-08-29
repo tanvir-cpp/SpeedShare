@@ -254,7 +254,7 @@ fun SettingsScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "SpeedShare v1.1.0",
                             color = TextPureWhite,
@@ -267,7 +267,40 @@ fun SettingsScreen(
                             fontSize = 12.sp
                         )
                     }
+
+                    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+                    val manualUpdateMessage by viewModel.manualUpdateMessage.collectAsState()
+
+                    Button(
+                        onClick = { viewModel.checkForUpdates(isManual = true) },
+                        enabled = !isCheckingUpdate,
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                color = NeonCyan,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(text = "Check", fontSize = 12.sp, color = TextPureWhite, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
+
+                val manualUpdateMessage by viewModel.manualUpdateMessage.collectAsState()
+                manualUpdateMessage?.let { msg ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = msg,
+                        color = NeonMint,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "Ultra-fast, zero-cloud peer-to-peer file sharing designed for direct socket transfers across Windows and Android devices on the local network.",
