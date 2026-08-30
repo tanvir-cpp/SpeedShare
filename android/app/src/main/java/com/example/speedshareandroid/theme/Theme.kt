@@ -11,19 +11,33 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = NeonIndigo,
-    secondary = NeonCyan,
-    tertiary = NeonMint,
-    background = BgMidnight,
-    surface = BgCard,
+    primary = PrimaryIndigo,
     onPrimary = TextPureWhite,
+    primaryContainer = PrimaryIndigoContainer,
+    onPrimaryContainer = PrimaryIndigoLight,
+    secondary = AccentSky,
     onSecondary = TextPureWhite,
+    secondaryContainer = AccentSkyContainer,
+    onSecondaryContainer = AccentSky,
+    tertiary = AccentMint,
     onTertiary = TextPureWhite,
+    background = SurfaceSlate950,
     onBackground = TextPrimary,
+    surface = SurfaceSlate900,
     onSurface = TextPrimary,
-    surfaceVariant = BgCardElevated,
+    surfaceVariant = SurfaceSlate850,
     onSurfaceVariant = TextSecondary,
-    outline = BorderGlass
+    surfaceContainerLowest = SurfaceSlate950,
+    surfaceContainerLow = SurfaceSlate900,
+    surfaceContainer = SurfaceSlate900,
+    surfaceContainerHigh = SurfaceSlate850,
+    surfaceContainerHighest = SurfaceSlate800,
+    outline = SurfaceSlate700,
+    outlineVariant = BorderGlass,
+    error = StatusError,
+    onError = TextPureWhite,
+    errorContainer = StatusErrorContainer,
+    onErrorContainer = StatusError
 )
 
 @Composable
@@ -38,9 +52,9 @@ fun SpeedShareAndroidTheme(
         SideEffect {
             val window = (view.context as Activity).window
             @Suppress("DEPRECATION")
-            window.statusBarColor = BgMidnight.toArgb()
+            window.statusBarColor = SurfaceSlate950.toArgb()
             @Suppress("DEPRECATION")
-            window.navigationBarColor = BgMidnight.toArgb()
+            window.navigationBarColor = SurfaceSlate950.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = false
@@ -54,3 +68,4 @@ fun SpeedShareAndroidTheme(
         content = content
     )
 }
+

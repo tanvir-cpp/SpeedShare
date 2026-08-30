@@ -56,7 +56,7 @@ if (-not (Test-Path $RegKey)) {
     New-Item -Path $RegKey -Force | Out-Null
 }
 Set-ItemProperty -Path $RegKey -Name "DisplayName" -Value "SpeedShare"
-Set-ItemProperty -Path $RegKey -Name "DisplayVersion" -Value "1.1.0"
+Set-ItemProperty -Path $RegKey -Name "DisplayVersion" -Value "1.2.0"
 Set-ItemProperty -Path $RegKey -Name "Publisher" -Value "SpeedShare Team"
 Set-ItemProperty -Path $RegKey -Name "InstallLocation" -Value $InstallDir
 Set-ItemProperty -Path $RegKey -Name "UninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$InstallDir\Uninstall-SpeedShare.ps1`""

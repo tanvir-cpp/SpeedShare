@@ -3,47 +3,84 @@ package com.example.speedshareandroid.theme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-// Core Deep Backgrounds (OLED Midnight Palette)
-val BgMidnight = Color(0xFF07090E)
-val BgCard = Color(0xFF10131B)
-val BgCardHover = Color(0xFF181C27)
-val BgCardElevated = Color(0xFF1E2333)
-val BorderGlass = Color(0xFF262C3F)
+// ============================================================================
+// SpeedShare Modern Slate & Indigo Design System Tokens
+// ============================================================================
+
+// Base Neutral Surface Hierarchy (Tailored Slate/Zinc)
+val SurfaceSlate950 = Color(0xFF090D16) // Main screen background
+val SurfaceSlate900 = Color(0xFF0F172A) // Cards & list containers
+val SurfaceSlate850 = Color(0xFF161F33) // Elevated cards / hovering items
+val SurfaceSlate800 = Color(0xFF1E293B) // High elevation / chips / pills
+val SurfaceSlate700 = Color(0xFF334155) // Strong borders & separators
+
+// Legacy / Theme compatibility aliases
+val BgMidnight = SurfaceSlate950
+val BgCard = SurfaceSlate900
+val BgCardHover = SurfaceSlate850
+val BgCardElevated = SurfaceSlate800
+val BorderGlass = Color(0xFF1E293B)
 val BorderGlassActive = Color(0xFF6366F1)
 
-// Vibrant Cyber Neon Accents
-val NeonIndigo = Color(0xFF6366F1)
-val NeonViolet = Color(0xFF8B5CF6)
-val NeonCyan = Color(0xFF00F2FE)
-val NeonMint = Color(0xFF00F5D4)
-val NeonSky = Color(0xFF38BDF8)
-val NeonEmerald = Color(0xFF10B981)
-val NeonRose = Color(0xFFF43F5E)
-val NeonAmber = Color(0xFFF59E0B)
+// Primary Brand & Accents (Electric Indigo)
+val PrimaryIndigo = Color(0xFF6366F1)
+val PrimaryIndigoLight = Color(0xFF818CF8)
+val PrimaryIndigoDark = Color(0xFF4F46E5)
+val PrimaryIndigoContainer = Color(0xFF1E1B4B)
+val PrimaryIndigoContainerHigh = Color(0xFF2E2B6B)
 
-// Typography
+// Secondary Accents (Clean Cyan / Sky & Mint)
+val AccentSky = Color(0xFF38BDF8)
+val AccentSkyContainer = Color(0xFF0C4A6E)
+val AccentCyan = Color(0xFF06B6D4)
+val AccentMint = Color(0xFF10B981)
+val AccentViolet = Color(0xFF8B5CF6)
+val AccentAmber = Color(0xFFF59E0B)
+val AccentRose = Color(0xFFF43F5E)
+
+// Legacy aliases for components during refactor
+val NeonIndigo = PrimaryIndigo
+val NeonViolet = AccentViolet
+val NeonCyan = AccentCyan
+val NeonMint = AccentMint
+val NeonSky = AccentSky
+val NeonEmerald = AccentMint
+val NeonRose = AccentRose
+val NeonAmber = AccentAmber
+
+// Typography & Hierarchy
 val TextPureWhite = Color(0xFFFFFFFF)
-val TextPrimary = Color(0xFFF1F5F9)
+val TextPrimary = Color(0xFFF8FAFC)
 val TextSecondary = Color(0xFF94A3B8)
 val TextMuted = Color(0xFF64748B)
+val TextDisabled = Color(0xFF475569)
 
-// Beautiful Gradients
+// Semantic Status Colors
+val StatusSuccess = Color(0xFF10B981)
+val StatusSuccessContainer = Color(0xFF064E3B)
+val StatusWarning = Color(0xFFF59E0B)
+val StatusWarningContainer = Color(0xFF78350F)
+val StatusError = Color(0xFFF43F5E)
+val StatusErrorContainer = Color(0xFF4C0519)
+
+// Refined Gradients (Subtle, non-jarring)
 val PrimaryGradient = Brush.horizontalGradient(
-    listOf(Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFF00F2FE))
+    listOf(Color(0xFF6366F1), Color(0xFF4F46E5))
 )
 
-val CyanMintGradient = Brush.horizontalGradient(
-    listOf(Color(0xFF00F2FE), Color(0xFF00F5D4))
+val PrimaryGlowGradient = Brush.linearGradient(
+    listOf(Color(0xFF6366F1).copy(alpha = 0.25f), Color(0xFF4F46E5).copy(alpha = 0.05f))
 )
 
-val CardGlowGradient = Brush.linearGradient(
-    listOf(Color(0xFF1A1F2E), Color(0xFF10131B))
+val CardSurfaceGradient = Brush.verticalGradient(
+    listOf(Color(0xFF161F33), Color(0xFF0F172A))
 )
 
-val SelectedDeviceGradient = Brush.horizontalGradient(
-    listOf(Color(0xFF1E1B4B), Color(0xFF172554))
+val HeroRadarGradient = Brush.radialGradient(
+    listOf(Color(0xFF6366F1).copy(alpha = 0.15f), Color.Transparent)
 )
 
 val ActiveTransferGradient = Brush.horizontalGradient(
-    listOf(Color(0xFF6366F1), Color(0xFF00F5D4))
+    listOf(Color(0xFF6366F1), Color(0xFF10B981))
 )
+

@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -14,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -29,65 +27,63 @@ fun QuickCategoryDeck(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Row 1: Photos & Videos
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             CategoryTile(
                 title = "Photos",
                 subtitle = "JPG, PNG, RAW",
-                icon = Icons.Default.AccountBox,
-                accentColor = NeonCyan,
+                icon = Icons.Default.Image,
+                accentColor = AccentSky,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("image/*") }
             )
             CategoryTile(
                 title = "Videos",
                 subtitle = "MP4, MKV, 4K",
-                icon = Icons.Default.PlayArrow,
-                accentColor = NeonViolet,
+                icon = Icons.Default.VideoLibrary,
+                accentColor = AccentViolet,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("video/*") }
             )
         }
 
+        // Row 2: Audio & All Files
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             CategoryTile(
-                title = "Music / Audio",
+                title = "Audio",
                 subtitle = "MP3, FLAC, WAV",
-                icon = Icons.Default.Star,
-                accentColor = NeonMint,
+                icon = Icons.Default.Audiotrack,
+                accentColor = AccentMint,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("audio/*") }
             )
             CategoryTile(
                 title = "All Files",
                 subtitle = "Docs, ZIP, APK",
-                icon = Icons.AutoMirrored.Filled.List,
-                accentColor = NeonIndigo,
+                icon = Icons.Default.Description,
+                accentColor = PrimaryIndigo,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("*/*") }
             )
         }
 
-        Row(
+        // Row 3: Entire Folder
+        CategoryTile(
+            title = "Folder / Directory",
+            subtitle = "Preserve subfolders & batch transfer",
+            icon = Icons.Default.FolderOpen,
+            accentColor = AccentAmber,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            CategoryTile(
-                title = "Pick Folder",
-                subtitle = "Add entire directory",
-                icon = Icons.Default.Folder,
-                accentColor = NeonSky,
-                modifier = Modifier.weight(1f),
-                onClick = onPickFolder
-            )
-        }
+            onClick = onPickFolder
+        )
     }
 }
 
@@ -102,25 +98,20 @@ private fun CategoryTile(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(BgCard)
-            .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(SurfaceSlate900)
+            .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(14.dp)
+            .padding(12.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(accentColor.copy(alpha = 0.25f), BgCardHover)
-                        )
-                    )
-                    .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                    .background(accentColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -131,21 +122,23 @@ private fun CategoryTile(
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = TextPureWhite,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
                 )
                 Text(
                     text = subtitle,
-                    color = TextMuted,
-                    fontSize = 10.sp
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
                 )
             }
         }
     }
 }
+

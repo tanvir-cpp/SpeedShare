@@ -42,7 +42,7 @@ fun HistoryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgMidnight)
+            .background(SurfaceSlate950)
             .padding(horizontal = 16.dp)
     ) {
         Spacer(modifier = Modifier.height(8.dp))
@@ -51,12 +51,12 @@ fun HistoryScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.setHistorySearchQuery(it) },
-            placeholder = { Text("Search by file name or device...", color = TextMuted, fontSize = 13.sp) },
+            placeholder = { Text("Search transfers…", color = TextSecondary, fontSize = 13.sp) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = TextMuted,
+                    tint = TextSecondary,
                     modifier = Modifier.size(18.dp)
                 )
             },
@@ -66,7 +66,7 @@ fun HistoryScreen(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Clear search",
-                            tint = TextMuted,
+                            tint = TextSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -74,20 +74,20 @@ fun HistoryScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(14.dp),
+                .height(50.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = BgCard,
-                unfocusedContainerColor = BgCard,
-                focusedBorderColor = NeonCyan,
-                unfocusedBorderColor = BorderGlass,
-                focusedTextColor = TextPureWhite,
-                unfocusedTextColor = TextPureWhite
+                focusedContainerColor = SurfaceSlate900,
+                unfocusedContainerColor = SurfaceSlate900,
+                focusedBorderColor = PrimaryIndigo,
+                unfocusedBorderColor = SurfaceSlate700.copy(alpha = 0.6f),
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary
             ),
             singleLine = true
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Filter Pills Row & Clear Button
         Row(
@@ -96,7 +96,7 @@ fun HistoryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 val filters = listOf(
@@ -115,22 +115,22 @@ fun HistoryScreen(
                             Text(
                                 text = label,
                                 fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            containerColor = BgCard,
-                            selectedContainerColor = NeonIndigo.copy(alpha = 0.25f),
+                            containerColor = SurfaceSlate900,
+                            selectedContainerColor = PrimaryIndigoContainer,
                             labelColor = TextSecondary,
-                            selectedLabelColor = NeonCyan
+                            selectedLabelColor = PrimaryIndigoLight
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
                             selected = isSelected,
-                            borderColor = BorderGlass,
-                            selectedBorderColor = NeonCyan
+                            borderColor = SurfaceSlate700.copy(alpha = 0.5f),
+                            selectedBorderColor = PrimaryIndigo
                         ),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
                 }
             }
@@ -141,16 +141,16 @@ fun HistoryScreen(
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
+                        imageVector = Icons.Default.DeleteOutline,
                         contentDescription = "Clear All History",
-                        tint = NeonRose,
+                        tint = StatusError,
                         modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Content List
         if (historyRecords.isEmpty()) {
@@ -166,31 +166,31 @@ fun HistoryScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(56.dp)
                             .clip(CircleShape)
-                            .background(BgCard)
-                            .border(1.dp, BorderGlass, CircleShape),
+                            .background(SurfaceSlate900)
+                            .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
+                            imageVector = Icons.Default.History,
                             contentDescription = null,
                             tint = TextMuted,
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = if (searchQuery.isNotEmpty()) "No matching transfers found" else "No Transfer History",
-                        color = TextPureWhite,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        text = if (searchQuery.isNotEmpty()) "No matching transfers" else "No Transfer History",
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (searchQuery.isNotEmpty()) "Try a different keyword or filter category." else "Transferred files will be logged here with instant 1-tap open & share actions.",
+                        text = if (searchQuery.isNotEmpty()) "Try a different keyword or change the category filter." else "Sent and received files will appear here with quick open & share actions.",
                         color = TextSecondary,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -198,7 +198,7 @@ fun HistoryScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 100.dp)
             ) {
                 items(
@@ -220,19 +220,19 @@ fun HistoryScreen(
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            containerColor = BgCard,
-            shape = RoundedCornerShape(18.dp),
+            containerColor = SurfaceSlate900,
+            shape = RoundedCornerShape(16.dp),
             title = {
                 Text(
                     text = "Clear Transfer History?",
-                    color = TextPureWhite,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
+                    fontSize = 16.sp
                 )
             },
             text = {
                 Text(
-                    text = "This will remove all transfer history records. Saved files on disk remain safe in Downloads/SpeedShare.",
+                    text = "This will remove all transfer history records. Received files on disk remain safe in Downloads/SpeedShare.",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
@@ -243,10 +243,10 @@ fun HistoryScreen(
                         viewModel.clearAllHistory()
                         showClearDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonRose),
-                    shape = RoundedCornerShape(10.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = StatusError),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Clear All", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Clear All", color = TextPureWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -257,3 +257,4 @@ fun HistoryScreen(
         )
     }
 }
+

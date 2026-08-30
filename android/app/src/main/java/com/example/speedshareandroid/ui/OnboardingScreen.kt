@@ -1,6 +1,7 @@
 package com.example.speedshareandroid.ui
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,21 +45,21 @@ fun OnboardingScreen(
     val pages = listOf(
         OnboardingPage(
             title = "Zero-Config Instant Radar",
-            description = "Discover Windows PCs and Android devices on the same Wi-Fi instantly. No pairing or complex setup required.",
-            icon = Icons.Default.Search,
-            accentColor = NeonCyan
+            description = "Discover Windows PCs and Android devices on the same Wi-Fi network instantly without complex setup or manual pairing.",
+            icon = Icons.Default.Radar,
+            accentColor = AccentSky
         ),
         OnboardingPage(
-            title = "Ultra-Fast Direct Streaming",
-            description = "Stream files at line-rate Wi-Fi 6 & Gigabit speeds (200+ MB/s) directly peer-to-peer with zero compression.",
-            icon = Icons.Default.Share,
-            accentColor = NeonMint
+            title = "Ultra-Fast Socket Streaming",
+            description = "Stream large files at full Wi-Fi & Gigabit speeds (200+ MB/s) directly peer-to-peer with zero compression or cloud latency.",
+            icon = Icons.Default.Bolt,
+            accentColor = AccentMint
         ),
         OnboardingPage(
-            title = "Full Transfer History",
-            description = "Track sent and received files, view speed logs, and 1-tap open or share received items at any time.",
-            icon = Icons.Default.CheckCircle,
-            accentColor = NeonIndigo
+            title = "Transfer Log & File Hub",
+            description = "Keep track of sent and received items with speed records and 1-tap open or share actions right from History.",
+            icon = Icons.Default.History,
+            accentColor = PrimaryIndigoLight
         )
     )
 
@@ -67,21 +69,12 @@ fun OnboardingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgMidnight)
+            .background(SurfaceSlate950)
     ) {
-        // Ambient background glow
-        Box(
-            modifier = Modifier
-                .size(350.dp)
-                .offset((-80).dp, (-80).dp)
-                .clip(CircleShape)
-                .background(Brush.radialGradient(listOf(NeonIndigo.copy(alpha = 0.2f), Color.Transparent)))
-        )
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -89,7 +82,7 @@ fun OnboardingScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 24.dp),
+                    .padding(top = 28.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -97,31 +90,23 @@ fun OnboardingScreen(
                     painter = painterResource(id = R.drawable.speedshare_logo),
                     contentDescription = "SpeedShare Logo",
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Speed",
-                            color = TextPureWhite,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
-                        Text(
-                            text = "Share",
-                            color = NeonCyan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
-                    }
                     Text(
-                        text = "PEER-TO-PEER GIGABIT TRANSFER",
-                        color = TextMuted,
-                        fontSize = 9.sp,
+                        text = "SpeedShare",
+                        color = TextPrimary,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        fontSize = 20.sp
+                    )
+                    Text(
+                        text = "DIRECT PEER-TO-PEER TRANSFER",
+                        color = TextSecondary,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
@@ -137,48 +122,47 @@ fun OnboardingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(110.dp)
-                            .clip(RoundedCornerShape(30.dp))
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(24.dp))
                             .background(
                                 Brush.linearGradient(
-                                    listOf(page.accentColor.copy(alpha = 0.2f), BgCard)
+                                    listOf(page.accentColor.copy(alpha = 0.15f), SurfaceSlate900)
                                 )
                             )
-                            .border(1.5.dp, page.accentColor.copy(alpha = 0.4f), RoundedCornerShape(30.dp))
-                            .padding(24.dp),
+                            .border(1.dp, page.accentColor.copy(alpha = 0.35f), RoundedCornerShape(24.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = page.icon,
                             contentDescription = null,
                             tint = page.accentColor,
-                            modifier = Modifier.size(54.dp)
+                            modifier = Modifier.size(44.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(36.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
 
                     Text(
                         text = page.title,
-                        color = TextPureWhite,
-                        fontSize = 22.sp,
+                        color = TextPrimary,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
                         text = page.description,
                         color = TextSecondary,
                         fontSize = 14.sp,
-                        lineHeight = 22.sp,
+                        lineHeight = 20.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -188,24 +172,28 @@ fun OnboardingScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Page Indicator Dots
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 28.dp)
+                    modifier = Modifier.padding(bottom = 24.dp)
                 ) {
                     repeat(pages.size) { iteration ->
                         val isCurrent = pagerState.currentPage == iteration
+                        val dotWidth by animateDpAsState(
+                            targetValue = if (isCurrent) 22.dp else 6.dp,
+                            label = "dot_width"
+                        )
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 4.dp)
+                                .padding(horizontal = 3.dp)
                                 .height(6.dp)
-                                .width(if (isCurrent) 24.dp else 6.dp)
+                                .width(dotWidth)
                                 .clip(RoundedCornerShape(3.dp))
-                                .background(if (isCurrent) NeonCyan else BorderGlass)
+                                .background(if (isCurrent) PrimaryIndigo else SurfaceSlate700)
                         )
                     }
                 }
@@ -223,16 +211,16 @@ fun OnboardingScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(50.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = NeonIndigo,
+                        containerColor = PrimaryIndigo,
                         contentColor = TextPureWhite
                     ),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
                         text = if (pagerState.currentPage == pages.size - 1) "Get Started" else "Continue",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -240,3 +228,4 @@ fun OnboardingScreen(
         }
     }
 }
+

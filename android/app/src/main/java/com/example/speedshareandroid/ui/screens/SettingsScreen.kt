@@ -36,7 +36,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgMidnight)
+            .background(SurfaceSlate950)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -44,18 +44,18 @@ fun SettingsScreen(
         // Section 1: Device Profile
         Text(
             text = "DEVICE PROFILE",
-            color = TextMuted,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            letterSpacing = 1.sp
+            color = TextSecondary,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+            letterSpacing = 0.5.sp
         )
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = BgCard),
-            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
+                .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -69,14 +69,15 @@ fun SettingsScreen(
                         label = { Text("Visible Device Name") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = BorderGlass,
-                            focusedTextColor = TextPureWhite,
-                            unfocusedTextColor = TextPureWhite
+                            focusedBorderColor = PrimaryIndigo,
+                            unfocusedBorderColor = SurfaceSlate700,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -94,7 +95,7 @@ fun SettingsScreen(
                                 isEditingName = false
                                 Toast.makeText(context, "Device name updated", Toast.LENGTH_SHORT).show()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Save", color = TextPureWhite, fontWeight = FontWeight.Bold)
@@ -106,7 +107,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Visible Name",
                                 color = TextMuted,
@@ -114,9 +115,9 @@ fun SettingsScreen(
                             )
                             Text(
                                 text = customDeviceName,
-                                color = TextPureWhite,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp
                             )
                             Text(
                                 text = "Broadcasted to other devices on the same network.",
@@ -129,7 +130,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit Name",
-                                tint = NeonCyan
+                                tint = PrimaryIndigoLight
                             )
                         }
                     }
@@ -139,19 +140,19 @@ fun SettingsScreen(
 
         // Section 2: Storage & Downloads
         Text(
-            text = "STORAGE & DOWNLOADS",
-            color = TextMuted,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            letterSpacing = 1.sp
+            text = "STORAGE & PROTOCOL",
+            color = TextSecondary,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+            letterSpacing = 0.5.sp
         )
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = BgCard),
-            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
+                .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -160,35 +161,36 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 SettingsItem(
-                    icon = Icons.Default.LocationOn,
-                    title = "Target Storage Folder",
+                    icon = Icons.Default.Folder,
+                    title = "Target Download Folder",
                     value = "Internal Storage / Download / SpeedShare",
-                    accentColor = NeonCyan
+                    accentColor = AccentAmber
                 )
+                HorizontalDivider(color = SurfaceSlate800, thickness = 0.5.dp)
                 SettingsItem(
-                    icon = Icons.Default.CheckCircle,
-                    title = "Transfer Architecture",
+                    icon = Icons.Default.Bolt,
+                    title = "Streaming Protocol",
                     value = "High-Throughput Raw TCP Streaming (2MB Buffers)",
-                    accentColor = NeonMint
+                    accentColor = AccentMint
                 )
             }
         }
 
-        // Section 3: Network Configuration
+        // Section 3: Network Diagnostics
         Text(
-            text = "NETWORK CONFIGURATION",
-            color = TextMuted,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            letterSpacing = 1.sp
+            text = "NETWORK DIAGNOSTICS",
+            color = TextSecondary,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+            letterSpacing = 0.5.sp
         )
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = BgCard),
-            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
+                .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -197,22 +199,24 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 SettingsItem(
-                    icon = Icons.Default.Info,
+                    icon = Icons.Default.Wifi,
                     title = "Local Network IP",
                     value = viewModel.localIp,
-                    accentColor = NeonSky
+                    accentColor = AccentSky
                 )
+                HorizontalDivider(color = SurfaceSlate800, thickness = 0.5.dp)
                 SettingsItem(
-                    icon = Icons.Default.Search,
+                    icon = Icons.Default.Radar,
                     title = "Discovery Port",
-                    value = "UDP 53317 (Auto Broadcast Beacons)",
-                    accentColor = NeonViolet
+                    value = "UDP 53317 (Beacon Broadcasts)",
+                    accentColor = AccentViolet
                 )
+                HorizontalDivider(color = SurfaceSlate800, thickness = 0.5.dp)
                 SettingsItem(
-                    icon = Icons.Default.PlayArrow,
+                    icon = Icons.Default.SwapVert,
                     title = "Streaming Port",
                     value = "TCP 53318 (Direct Socket Streaming)",
-                    accentColor = NeonMint
+                    accentColor = AccentMint
                 )
             }
         }
@@ -220,18 +224,18 @@ fun SettingsScreen(
         // Section 4: About
         Text(
             text = "ABOUT SPEEDSHARE",
-            color = TextMuted,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            letterSpacing = 1.sp
+            color = TextSecondary,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+            letterSpacing = 0.5.sp
         )
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = BgCard),
-            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, BorderGlass, RoundedCornerShape(16.dp))
+                .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -243,21 +247,21 @@ fun SettingsScreen(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(NeonIndigo.copy(alpha = 0.2f)),
+                            .background(PrimaryIndigo.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Star,
+                            imageVector = Icons.Default.Info,
                             contentDescription = null,
-                            tint = NeonCyan,
-                            modifier = Modifier.size(20.dp)
+                            tint = PrimaryIndigoLight,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "SpeedShare v${viewModel.currentAppVersion}",
-                            color = TextPureWhite,
+                            color = TextPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -269,23 +273,22 @@ fun SettingsScreen(
                     }
 
                     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
-                    val manualUpdateMessage by viewModel.manualUpdateMessage.collectAsState()
 
                     Button(
                         onClick = { viewModel.checkForUpdates(isManual = true) },
                         enabled = !isCheckingUpdate,
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo.copy(alpha = 0.6f)),
-                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigoContainer),
+                        shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         if (isCheckingUpdate) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(14.dp),
-                                color = NeonCyan,
+                                color = PrimaryIndigoLight,
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text(text = "Check", fontSize = 12.sp, color = TextPureWhite, fontWeight = FontWeight.Bold)
+                            Text(text = "Check", fontSize = 12.sp, color = PrimaryIndigoLight, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -295,7 +298,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = msg,
-                        color = NeonMint,
+                        color = AccentMint,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -304,14 +307,14 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "Ultra-fast, zero-cloud peer-to-peer file sharing designed for direct socket transfers across Windows and Android devices on the local network.",
-                    color = TextMuted,
+                    color = TextSecondary,
                     fontSize = 12.sp,
-                    lineHeight = 18.sp
+                    lineHeight = 17.sp
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(90.dp))
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
@@ -329,9 +332,8 @@ private fun SettingsItem(
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(accentColor.copy(alpha = 0.15f))
-                .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
+                .clip(RoundedCornerShape(8.dp))
+                .background(accentColor.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -350,10 +352,11 @@ private fun SettingsItem(
             )
             Text(
                 text = value,
-                color = TextPureWhite,
+                color = TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
         }
     }
 }
+
