@@ -88,7 +88,9 @@ Every release asset includes a cryptographic SHA-256 sidecar file for in-app int
 "@
 
 if (-not $SkipGitPush) {
-    git add .
+    # Stage release source and metadata without including signing keys or
+    # backup files that may be present in the Android keystore directory.
+    git add Install-SpeedShare.ps1 Uninstall-SpeedShare.ps1 README.md VERSION protocol scripts android/app windows windows-installer windows.Tests
     git commit -m "release: SpeedShare $Tag - Modern UI/UX Overhaul & Experience Modernization"
     git push origin main
     

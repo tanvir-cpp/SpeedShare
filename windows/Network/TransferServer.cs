@@ -28,6 +28,7 @@ namespace SpeedShareWindows.Network
         public const int DefaultPort = 53318;
         private const int ChunkSize = 1024 * 1024; // 1 MB buffer for maximum speed
         private const int MaxConcurrentClients = 8;
+        private const int MaxFilesPerTransfer = 1000;
 
         private TcpListener? _listener;
         private CancellationTokenSource? _cts;
@@ -129,6 +130,7 @@ namespace SpeedShareWindows.Network
             using (var stream = client.GetStream())
             {
                 string sessionId = string.Empty;
+                string? currentDestinationPath = null;
                 try
                 {
                     // 1. Read Request Header Length
@@ -162,6 +164,25 @@ namespace SpeedShareWindows.Network
                         }
                         catch { }
                         throw new InvalidDataException("Invalid transfer request");
+                    }
+
+                    if (request.Files.Count > MaxFilesPerTransfer || request.TotalSize < 0)
+                    {
+                        throw new InvalidDataException("Transfer request exceeds supported limits");
+                    }
+
+                    long declaredTotal = 0;
+                    foreach (var file in request.Files)
+                    {
+                        if (file.Size < 0 || string.IsNullOrWhiteSpace(file.Name))
+                        {
+                            throw new InvalidDataException("Transfer contains invalid file metadata");
+                        }
+                        declaredTotal = checked(declaredTotal + file.Size);
+                    }
+                    if (declaredTotal != request.TotalSize)
+                    {
+                        throw new InvalidDataException("Transfer total size does not match file metadata");
                     }
 
                     sessionId = request.SessionId;
@@ -228,14 +249,15 @@ namespace SpeedShareWindows.Network
                         int fileIndex = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(metaBuf, 0));
                         long fileSize = IPAddress.NetworkToHostOrder(BitConverter.ToInt64(metaBuf, 4));
 
-                        if (fileIndex != i)
+                        if (fileIndex != i || fileSize != fileMeta.Size || fileSize < 0)
                         {
-                            Debug.WriteLine($"[TransferServer] Unexpected file index {fileIndex} (expected {i})");
+                            throw new InvalidDataException("File metadata does not match transfer request");
                         }
 
                         // Preserve relative folder structure if present
                         string safeRelative = SanitizeRelativePath(fileMeta.Name);
                         string destinationPath = GetUniqueFilePath(_downloadFolder, safeRelative);
+                        currentDestinationPath = destinationPath;
 
                         if (fileSize == 0)
                         {
@@ -304,6 +326,8 @@ namespace SpeedShareWindows.Network
                         }
                     }
 
+                    currentDestinationPath = null;
+
                     // 5. Send Completion confirmation
                     var completeMsg = new ControlMessage
                     {
@@ -316,10 +340,12 @@ namespace SpeedShareWindows.Network
                 }
                 catch (OperationCanceledException)
                 {
+                    if (currentDestinationPath != null) TryDeletePartialFile(currentDestinationPath);
                     TransferCompleted?.Invoke(sessionId, false, "Cancelled");
                 }
                 catch (Exception ex)
                 {
+                    if (currentDestinationPath != null) TryDeletePartialFile(currentDestinationPath);
                     Debug.WriteLine($"[TransferServer] Transfer error: {ex.Message}");
                     TransferCompleted?.Invoke(sessionId, false, ex.Message);
                 }
@@ -368,6 +394,15 @@ namespace SpeedShareWindows.Network
                 counter++;
             }
             return path;
+        }
+
+        private static void TryDeletePartialFile(string path)
+        {
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch { }
         }
 
         private static async Task SendControlMessageAsync(NetworkStream stream, ControlMessage message, CancellationToken token)

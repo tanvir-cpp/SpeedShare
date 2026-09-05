@@ -15,6 +15,7 @@ namespace SpeedShareWindows.Network
     public class TransferClient
     {
         private const int ChunkSize = 1024 * 1024; // 1 MB buffer for maximum speed
+        private const int MaxControlMessageSize = 10 * 1024 * 1024;
         private CancellationTokenSource? _cts;
 
         public event Action<TransferProgressReport>? ProgressChanged;
@@ -92,6 +93,10 @@ namespace SpeedShareWindows.Network
                 var lengthBuffer = new byte[4];
                 await ReadExactAsync(stream, lengthBuffer, 0, 4, token);
                 int responseLength = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(lengthBuffer, 0));
+                if (responseLength <= 0 || responseLength > MaxControlMessageSize)
+                {
+                    throw new InvalidDataException("Invalid response size");
+                }
 
                 var responseBytes = new byte[responseLength];
                 await ReadExactAsync(stream, responseBytes, 0, responseLength, token);
@@ -207,6 +212,10 @@ namespace SpeedShareWindows.Network
                 // 5. Read Final Completion Message
                 await ReadExactAsync(stream, lengthBuffer, 0, 4, token);
                 int completionLength = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(lengthBuffer, 0));
+                if (completionLength <= 0 || completionLength > MaxControlMessageSize)
+                {
+                    throw new InvalidDataException("Invalid completion message size");
+                }
                 var completionBytes = new byte[completionLength];
                 await ReadExactAsync(stream, completionBytes, 0, completionLength, token);
 

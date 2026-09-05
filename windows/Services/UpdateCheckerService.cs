@@ -269,15 +269,28 @@ namespace SpeedShareWindows.Services
                     }
                 }
 
-                string? expectedSha256 = null;
-                if (sha256Url != null)
+                if (string.IsNullOrWhiteSpace(installerUrl) || string.IsNullOrWhiteSpace(sha256Url))
                 {
-                    try
+                    return new UpdateCheckOutcome
                     {
-                        var sha = await _httpClient.GetStringAsync(sha256Url);
-                        expectedSha256 = sha.Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-                    }
-                    catch { /* hash verification is best-effort */ }
+                        Result = UpdateCheckResult.Failed,
+                        Error = "Release is missing a verifiable installer and SHA-256 sidecar"
+                    };
+                }
+
+                string? expectedSha256 = null;
+                try
+                {
+                    var sha = await _httpClient.GetStringAsync(sha256Url);
+                    expectedSha256 = sha.Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                }
+                catch (Exception ex)
+                {
+                    return new UpdateCheckOutcome { Result = UpdateCheckResult.Failed, Error = $"Could not fetch installer hash: {ex.Message}" };
+                }
+                if (expectedSha256 == null || !System.Text.RegularExpressions.Regex.IsMatch(expectedSha256, "^[0-9a-fA-F]{64}$"))
+                {
+                    return new UpdateCheckOutcome { Result = UpdateCheckResult.Failed, Error = "Release contains an invalid installer hash" };
                 }
 
                 return new UpdateCheckOutcome

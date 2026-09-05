@@ -129,6 +129,12 @@ object UpdateChecker {
                 }
             }
 
+            if (apkUrl.isNullOrBlank() || sha256.isNullOrBlank()) {
+                return@withContext kotlin.Result.failure(
+                    UpdateError.Download(IllegalStateException("Release is missing a verifiable APK and SHA-256 sidecar"))
+                )
+            }
+
             kotlin.Result.success(
                 UpdateInfo(
                     versionTag = tagName,
@@ -217,17 +223,25 @@ object UpdateChecker {
             }
 
             // SHA-256 check
-            if (sha256Url != null) {
-                val expectedHash = fetchText(sha256Url)?.trim()?.split(Regex("\\s+"))?.firstOrNull()
-                if (!expectedHash.isNullOrEmpty()) {
-                    val actualHash = sha256Of(downloaded)
-                    if (!actualHash.equals(expectedHash, ignoreCase = true)) {
-                        downloaded.delete()
-                        return@withContext kotlin.Result.failure(
-                            UpdateError.HashMismatch(expectedHash, actualHash)
-                        )
-                    }
-                }
+            if (sha256Url.isNullOrBlank()) {
+                downloaded.delete()
+                return@withContext kotlin.Result.failure(
+                    UpdateError.Download(IllegalStateException("Missing SHA-256 sidecar"))
+                )
+            }
+            val expectedHash = fetchText(sha256Url)?.trim()?.split(Regex("\\s+"))?.firstOrNull()
+            if (expectedHash.isNullOrEmpty() || !expectedHash.matches(Regex("[0-9a-fA-F]{64}"))) {
+                downloaded.delete()
+                return@withContext kotlin.Result.failure(
+                    UpdateError.Download(IllegalStateException("Invalid SHA-256 sidecar"))
+                )
+            }
+            val actualHash = sha256Of(downloaded)
+            if (!actualHash.equals(expectedHash, ignoreCase = true)) {
+                downloaded.delete()
+                return@withContext kotlin.Result.failure(
+                    UpdateError.HashMismatch(expectedHash, actualHash)
+                )
             }
 
             kotlin.Result.success(downloaded)

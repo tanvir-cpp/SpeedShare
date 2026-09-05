@@ -30,6 +30,7 @@ class TransferServer(
     companion object {
         const val DEFAULT_PORT = 53318
         private const val CHUNK_SIZE = 1024 * 1024 // 1 MB buffer
+        private const val MAX_FILES_PER_TRANSFER = 1000
         private const val TAG = "TransferServer"
     }
 
@@ -139,6 +140,7 @@ class TransferServer(
         var currentSenderIp = socket.inetAddress?.hostAddress ?: ""
         if (currentSenderIp.startsWith("::ffff:")) currentSenderIp = currentSenderIp.substring(7)
         var sessionId = "ss-${sessionIdGen.incrementAndGet().toString(16)}"
+        var currentDestinationFile: File? = null
         val receivedFilesList = mutableListOf<FileItem>()
         var averageSpeed = 0.0
 
@@ -174,17 +176,28 @@ class TransferServer(
             val devType = json.optString("deviceType", "WINDOWS")
             val totalSize = json.optLong("totalSize")
             val filesJson = json.optJSONArray("files") ?: JSONArray()
+            if (filesJson.length() == 0 || filesJson.length() > MAX_FILES_PER_TRANSFER || totalSize < 0) {
+                throw IllegalArgumentException("Invalid transfer metadata")
+            }
 
             for (i in 0 until filesJson.length()) {
                 val fObj = filesJson.getJSONObject(i)
+                val fileSize = fObj.optLong("size", -1L)
+                val fileName = fObj.optString("name").trim()
+                if (fileSize < 0 || fileName.isEmpty()) {
+                    throw IllegalArgumentException("Invalid file metadata")
+                }
                 receivedFilesList.add(
                     FileItem(
                         id = fObj.optString("id", i.toString()),
-                        name = fObj.optString("name", "file_$i"),
-                        size = fObj.optLong("size", 0L),
+                        name = fileName,
+                        size = fileSize,
                         mimeType = fObj.optString("mime", "application/octet-stream")
                     )
                 )
+            }
+            if (receivedFilesList.sumOf { it.size } != totalSize) {
+                throw IllegalArgumentException("Transfer total size does not match file metadata")
             }
 
             // Replace the active socket entry now that we have a real sessionId
@@ -277,12 +290,13 @@ class TransferServer(
                 val fileIndex = inputStream.readInt()
                 val fileSize = inputStream.readLong()
 
-                if (fileIndex != i) {
-                    Log.w(TAG, "Unexpected file index $fileIndex (expected $i)")
+                if (fileIndex != i || fileSize != fileMeta.size || fileSize < 0) {
+                    throw IllegalArgumentException("File metadata does not match transfer request")
                 }
 
                 val safeFileName = fileMeta.name.replace("/", "_").replace("\\", "_")
                 val destFile = getUniqueFile(downloadDir, safeFileName)
+                currentDestinationFile = destFile
 
                 if (fileSize == 0L) {
                     // Empty file: still need to create it so MediaScanner picks it up
@@ -355,6 +369,7 @@ class TransferServer(
                 } catch (e: Exception) {
                     Log.d(TAG, "Media scan warning: ${e.message}")
                 }
+                currentDestinationFile = null
             }
 
             // Send Transfer Complete confirmation
@@ -370,6 +385,7 @@ class TransferServer(
             _transferCompletedFlow.emit(Pair(true, null))
         } catch (e: Exception) {
             Log.e(TAG, "Transfer receive error: ${e.message}")
+            currentDestinationFile?.let { runCatching { if (it.exists()) it.delete() } }
 
             if (receivedFilesList.isNotEmpty()) {
                 receivedFilesList.forEach { f ->

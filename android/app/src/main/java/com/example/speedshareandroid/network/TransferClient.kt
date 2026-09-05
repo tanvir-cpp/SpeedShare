@@ -263,6 +263,9 @@ class TransferClient(
 
             // 4. Read final completion confirmation
             val compLen = inputStream.readInt()
+            if (compLen <= 0 || compLen > 10 * 1024 * 1024) {
+                throw IllegalArgumentException("Invalid completion message size")
+            }
             val compBytes = ByteArray(compLen)
             inputStream.readFully(compBytes)
 
