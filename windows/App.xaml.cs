@@ -16,5 +16,9 @@ public partial class App : Application
         // constructed so every DynamicResource resolves against the right palette.
         var (_, _, theme) = SettingsService.Load();
         ThemeService.Apply(theme);
+
+        // No StartupUri in App.xaml — create the main window explicitly so the
+        // theme is applied before it loads its resources.
+        new MainWindow().Show();
     }
 }

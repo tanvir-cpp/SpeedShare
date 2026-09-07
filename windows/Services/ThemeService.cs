@@ -18,9 +18,6 @@ namespace SpeedShareWindows.Services
     /// </summary>
     public static class ThemeService
     {
-        private const string LightThemePath = "Themes/Light.xaml";
-        private const string DarkThemePath = "Themes/Dark.xaml";
-
         public static AppTheme Current { get; private set; } = AppTheme.System;
 
         /// <summary>Effective (resolved) theme — System becomes Light or Dark.</summary>
@@ -50,7 +47,11 @@ namespace SpeedShareWindows.Services
 
             var palette = new ResourceDictionary
             {
-                Source = new Uri(dark ? DarkThemePath : LightThemePath, UriKind.Relative)
+                Source = new Uri(
+                    dark
+                        ? "pack://application:,,,/Themes/Dark.xaml"
+                        : "pack://application:,,,/Themes/Light.xaml",
+                    UriKind.Absolute)
             };
             app.Resources.MergedDictionaries.Insert(0, palette);
         }

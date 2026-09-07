@@ -17,7 +17,11 @@ public partial class App : Application
         bool dark = SystemUsesDarkTheme();
         var palette = new ResourceDictionary
         {
-            Source = new Uri(dark ? "Themes/Dark.xaml" : "Themes/Light.xaml", UriKind.Relative)
+            Source = new Uri(
+                dark
+                    ? "pack://application:,,,/Themes/Dark.xaml"
+                    : "pack://application:,,,/Themes/Light.xaml",
+                UriKind.Absolute)
         };
         Resources.MergedDictionaries.Insert(0, palette);
     }

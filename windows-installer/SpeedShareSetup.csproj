@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\windows\publish\SpeedShareWindows.exe" LogicalName="Payload.SpeedShareWindows.exe" />
+    <Resource Include="Themes\Light.xaml" />
+    <Resource Include="Themes\Dark.xaml" />
     <Manifest Include="app.manifest" />
   </ItemGroup>
 

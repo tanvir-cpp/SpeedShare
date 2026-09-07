@@ -24,6 +24,8 @@
   <ItemGroup>
     <Resource Include="app.ico" />
     <Resource Include="app_icon.png" />
+    <Resource Include="Themes\Light.xaml" />
+    <Resource Include="Themes\Dark.xaml" />
     <Manifest Include="app.manifest" />
   </ItemGroup>
 
