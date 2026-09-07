@@ -18,7 +18,9 @@ namespace SpeedShareWindows.Models
         public string DisplayType => IsAndroid ? "Android" : "Windows";
         public string DisplayBadge => IsAndroid ? "Android Device" : "Windows PC";
         public string PlatformDisplay => IsAndroid ? "Android Device" : "Windows PC";
-        public string PlatformIcon => IsAndroid ? "📱" : "💻";
+
+        // Segoe MDL2 Assets glyphs: phone / laptop.
+        public string PlatformIcon => IsAndroid ? "\uE8A9" : "\uE7F8";
     }
 
     public class BeaconMessage

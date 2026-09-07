@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,8 +37,10 @@ import com.example.speedshareandroid.R
 import com.example.speedshareandroid.models.DiscoveredPeer
 import com.example.speedshareandroid.models.FileItem
 import com.example.speedshareandroid.theme.*
+import com.example.speedshareandroid.ui.components.IncomingTransferSheet
 import com.example.speedshareandroid.ui.components.QuickCategoryDeck
 import com.example.speedshareandroid.ui.components.RadarHero
+import com.example.speedshareandroid.ui.components.TransferSheet
 import com.example.speedshareandroid.ui.components.UpdateDialog
 import com.example.speedshareandroid.ui.screens.HistoryScreen
 import com.example.speedshareandroid.ui.screens.SettingsScreen
@@ -48,6 +51,7 @@ fun SpeedShareScreen(
     viewModel: SpeedShareViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val colors = LocalSpeedShareColors.current
     val currentTab by viewModel.selectedTab.collectAsState()
     val peers by viewModel.peers.collectAsState()
     val selectedPeer by viewModel.selectedPeer.collectAsState()
@@ -56,6 +60,7 @@ fun SpeedShareScreen(
     val isTransferring by viewModel.isTransferring.collectAsState()
     val transferProgress by viewModel.transferProgress.collectAsState()
     val statusDialog by viewModel.transferStatusDialog.collectAsState()
+    val isReceiving by viewModel.isReceiving.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val updateDownloadProgress by viewModel.updateDownloadProgress.collectAsState()
 
@@ -98,7 +103,7 @@ fun SpeedShareScreen(
                             contentDescription = "SpeedShare Logo",
                             modifier = Modifier
                                 .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(9.dp))
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
@@ -107,38 +112,39 @@ fun SpeedShareScreen(
                                     text = "SpeedShare",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 17.sp,
-                                    color = TextPrimary
+                                    color = colors.textPrimary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
+                                val peerCount = peers.size
                                 Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = PrimaryIndigo.copy(alpha = 0.15f)
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (peerCount > 0) colors.successContainer else MaterialTheme.colorScheme.secondaryContainer
                                 ) {
                                     Text(
-                                        text = "LAN P2P",
-                                        color = PrimaryIndigoLight,
+                                        text = if (peerCount > 0) "$peerCount online" else "Scanning",
+                                        color = if (peerCount > 0) colors.onSuccessContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
                             Text(
                                 text = "IP: ${viewModel.localIp}",
                                 fontSize = 11.sp,
-                                color = TextSecondary
+                                color = colors.textSecondary
                             )
                         }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SurfaceSlate950
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         },
         bottomBar = {
-            Column(modifier = Modifier.background(SurfaceSlate950)) {
-                // Floating Send Action Deck on Share Tab
+            Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
+                // Gradient Send deck on the Share tab when files are queued
                 if (currentTab == AppTab.SHARE) {
                     AnimatedVisibility(
                         visible = selectedFiles.isNotEmpty(),
@@ -146,10 +152,11 @@ fun SpeedShareScreen(
                         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = SurfaceSlate900,
-                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(PrimaryIndigo.copy(alpha = 0.5f))
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -158,7 +165,7 @@ fun SpeedShareScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp, 10.dp),
+                                    .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -166,13 +173,13 @@ fun SpeedShareScreen(
                                     val totalBytes = selectedFiles.sumOf { it.size }
                                     Text(
                                         text = "${selectedFiles.size} ${if (selectedFiles.size == 1) "file" else "files"} selected",
-                                        color = TextPrimary,
+                                        color = colors.textPrimary,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp
                                     )
                                     Text(
                                         text = FileItem.formatBytes(totalBytes),
-                                        color = AccentMint,
+                                        color = colors.success,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
                                     )
@@ -182,13 +189,17 @@ fun SpeedShareScreen(
                                     onClick = { viewModel.sendFiles() },
                                     enabled = selectedPeer != null && !isTransferring,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = PrimaryIndigo,
-                                        contentColor = TextPureWhite,
-                                        disabledContainerColor = SurfaceSlate800,
-                                        disabledContentColor = TextDisabled
+                                        containerColor = Color.Transparent,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        disabledContainerColor = colors.surfaceRaised,
+                                        disabledContentColor = colors.textDisabled
                                     ),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 9.dp),
+                                    modifier = Modifier.background(
+                                        brush = colors.brandGradients.primary,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Send,
@@ -207,333 +218,120 @@ fun SpeedShareScreen(
                     }
                 }
 
-                // Material 3 Navigation Bar
                 NavigationBar(
-                    containerColor = SurfaceSlate900,
+                    containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
-                    modifier = Modifier.border(0.5.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    modifier = Modifier.border(
+                        0.5.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                        RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+                    )
                 ) {
                     NavigationBarItem(
                         selected = currentTab == AppTab.SHARE,
                         onClick = { viewModel.selectTab(AppTab.SHARE) },
-                        icon = {
-                            Icon(Icons.Default.Share, contentDescription = "Transfer")
-                        },
+                        icon = { Icon(Icons.Default.Share, contentDescription = "Transfer") },
                         label = { Text("Transfer") },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = PrimaryIndigoLight,
-                            selectedTextColor = PrimaryIndigoLight,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = PrimaryIndigoContainer
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = colors.textSecondary,
+                            unselectedTextColor = colors.textSecondary,
+                            indicatorColor = MaterialTheme.colorScheme.primary
                         )
                     )
 
                     NavigationBarItem(
                         selected = currentTab == AppTab.HISTORY,
                         onClick = { viewModel.selectTab(AppTab.HISTORY) },
-                        icon = {
-                            Icon(Icons.Default.History, contentDescription = "History")
-                        },
+                        icon = { Icon(Icons.Default.History, contentDescription = "History") },
                         label = { Text("History") },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = PrimaryIndigoLight,
-                            selectedTextColor = PrimaryIndigoLight,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = PrimaryIndigoContainer
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = colors.textSecondary,
+                            unselectedTextColor = colors.textSecondary,
+                            indicatorColor = MaterialTheme.colorScheme.primary
                         )
                     )
 
                     NavigationBarItem(
                         selected = currentTab == AppTab.SETTINGS,
                         onClick = { viewModel.selectTab(AppTab.SETTINGS) },
-                        icon = {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
                         label = { Text("Settings") },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = PrimaryIndigoLight,
-                            selectedTextColor = PrimaryIndigoLight,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary,
-                            indicatorColor = PrimaryIndigoContainer
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = colors.textSecondary,
+                            unselectedTextColor = colors.textSecondary,
+                            indicatorColor = MaterialTheme.colorScheme.primary
                         )
                     )
                 }
             }
         },
-        containerColor = SurfaceSlate950
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
-                AppTab.SHARE -> {
-                    ShareTabContent(
-                        localDeviceName = viewModel.customDeviceName.collectAsState().value,
-                        localIp = viewModel.localIp,
-                        peers = peers,
-                        selectedPeer = selectedPeer,
-                        selectedFiles = selectedFiles,
-                        onRefresh = { viewModel.refreshDiscovery() },
-                        onSelectPeer = { p -> if (selectedPeer?.deviceId == p.deviceId) viewModel.clearSelectedPeer() else viewModel.selectPeer(p) },
-                        onPickCategory = { mime ->
-                            activePickerMime = mime
-                            filePickerLauncher.launch(if (mime == "*/*") arrayOf("*/*") else arrayOf(mime))
-                        },
-                        onPickFolder = { folderPickerLauncher.launch(null) },
-                        onRemoveFile = { f -> viewModel.removeFile(f) },
-                        onClearFiles = { viewModel.clearFiles() }
-                    )
-                }
-                AppTab.HISTORY -> {
-                    HistoryScreen(viewModel = viewModel)
-                }
-                AppTab.SETTINGS -> {
-                    SettingsScreen(viewModel = viewModel)
+            Crossfade(targetState = currentTab, label = "tab_crossfade") { tab ->
+                when (tab) {
+                    AppTab.SHARE -> {
+                        ShareTabContent(
+                            localDeviceName = viewModel.customDeviceName.collectAsState().value,
+                            localIp = viewModel.localIp,
+                            peers = peers,
+                            selectedPeer = selectedPeer,
+                            selectedFiles = selectedFiles,
+                            onRefresh = { viewModel.refreshDiscovery() },
+                            onSelectPeer = { p -> if (selectedPeer?.deviceId == p.deviceId) viewModel.clearSelectedPeer() else viewModel.selectPeer(p) },
+                            onPickCategory = { mime ->
+                                activePickerMime = mime
+                                filePickerLauncher.launch(if (mime == "*/*") arrayOf("*/*") else arrayOf(mime))
+                            },
+                            onPickFolder = { folderPickerLauncher.launch(null) },
+                            onRemoveFile = { f -> viewModel.removeFile(f) },
+                            onClearFiles = { viewModel.clearFiles() }
+                        )
+                    }
+                    AppTab.HISTORY -> {
+                        HistoryScreen(viewModel = viewModel)
+                    }
+                    AppTab.SETTINGS -> {
+                        SettingsScreen(viewModel = viewModel)
+                    }
                 }
             }
         }
     }
 
-    // Modal 1: Incoming Transfer Request Dialog
+    // Flow 1: Incoming transfer request — modal bottom sheet
     incomingRequest?.let { req ->
-        AlertDialog(
-            onDismissRequest = { viewModel.declineIncoming() },
-            containerColor = SurfaceSlate900,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryIndigo.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            tint = PrimaryIndigoLight,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Incoming Transfer",
-                        color = TextPrimary,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "${req.senderDevice} (${req.senderIp}) wants to send ${req.files.size} ${if (req.files.size == 1) "file" else "files"}",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Total Payload: ${FileItem.formatBytes(req.totalSize)}",
-                        color = AccentMint,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = SurfaceSlate950),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 140.dp)
-                    ) {
-                        LazyColumn(modifier = Modifier.padding(10.dp)) {
-                            items(req.files) { f ->
-                                Text(
-                                    text = "• ${f.name} (${f.formattedSize})",
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.acceptIncoming() },
-                    colors = ButtonDefaults.buttonColors(containerColor = StatusSuccess),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Accept & Receive", color = TextPureWhite, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.declineIncoming() }) {
-                    Text("Decline", color = StatusError)
-                }
-            }
+        IncomingTransferSheet(
+            request = req,
+            onAccept = { viewModel.acceptIncoming() },
+            onDecline = { viewModel.declineIncoming() }
         )
     }
 
-    // Modal 2: Active High-Speed Transfer Dialog
-    if (isTransferring) {
-        AlertDialog(
-            onDismissRequest = { /* prevent dismiss */ },
-            containerColor = SurfaceSlate900,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Transfer in Progress",
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    transferProgress?.let { p ->
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = StatusSuccess.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = p.formattedSpeed,
-                                color = StatusSuccess,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-            },
-            text = {
-                Column {
-                    val progress = transferProgress
-                    val percent = (progress?.percentage ?: 0f) / 100f
-
-                    // Large Speed Display
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        Text(
-                            text = progress?.formattedSpeed ?: "0.0 MB/s",
-                            color = StatusSuccess,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = progress?.formattedBitrate ?: "0 Mbps",
-                            color = TextSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    LinearProgressIndicator(
-                        progress = { percent },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = PrimaryIndigo,
-                        trackColor = SurfaceSlate950
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = if (progress != null) "${FileItem.formatBytes(progress.transferredBytes)} / ${FileItem.formatBytes(progress.totalBytes)} (${progress.percentage.toInt()}%)" else "Connecting…",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            text = progress?.formattedEta ?: "Estimating…",
-                            color = AccentSky,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = progress?.currentFileName ?: "Preparing sockets…",
-                        color = TextMuted,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.cancelTransfer() }) {
-                    Text("Cancel Transfer", color = StatusError)
-                }
-            }
+    // Flow 2: Active transfer + inline result — modal bottom sheet
+    if (isTransferring || statusDialog != null) {
+        TransferSheet(
+            progress = transferProgress,
+            inProgress = isTransferring,
+            resultSuccess = statusDialog?.first,
+            resultMessage = statusDialog?.second,
+            isReceiving = isReceiving,
+            onCancel = { viewModel.cancelTransfer() },
+            onDismissResult = { viewModel.dismissStatusDialog() }
         )
     }
 
-    // Modal 3: Transfer Status Result Dialog
-    statusDialog?.let { (success, message) ->
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissStatusDialog() },
-            containerColor = SurfaceSlate900,
-            shape = RoundedCornerShape(18.dp),
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (success) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (success) StatusSuccess else StatusError
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (success) "Transfer Completed" else "Transfer Notice",
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            text = {
-                Text(
-                    text = message ?: (if (success) "Files processed successfully and recorded in History." else "Transfer ended."),
-                    color = TextSecondary,
-                    fontSize = 13.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.dismissStatusDialog() },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("OK", color = TextPureWhite, fontWeight = FontWeight.Bold)
-                }
-            }
-        )
-    }
-
-    // Modal 4: Auto-Update Dialog
+    // Flow 4: Auto-update dialog
     updateInfo?.let { info ->
         UpdateDialog(
             updateInfo = info,
@@ -559,13 +357,13 @@ fun ShareTabContent(
     onRemoveFile: (FileItem) -> Unit,
     onClearFiles: () -> Unit
 ) {
+    val colors = LocalSpeedShareColors.current
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Hero: Animated Radar Scanner
         item {
             RadarHero(
                 localDeviceName = localDeviceName,
@@ -575,7 +373,7 @@ fun ShareTabContent(
             )
         }
 
-        // Section 1: Discovered Devices
+        // Section 1: Discovered devices
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -583,18 +381,16 @@ fun ShareTabContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "DISCOVERED PEERS",
+                    text = "Nearby devices",
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 11.sp,
-                    color = TextSecondary,
-                    letterSpacing = 0.5.sp
+                    fontSize = 13.sp,
+                    color = colors.textPrimary
                 )
-
                 if (peers.isNotEmpty()) {
                     Text(
                         text = "Tap to select",
                         fontSize = 11.sp,
-                        color = PrimaryIndigoLight
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -603,27 +399,43 @@ fun ShareTabContent(
         if (peers.isEmpty()) {
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
-                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, SurfaceSlate700.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(colors.surfaceRaised)
+                                .border(1.dp, colors.border, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Radar,
+                                contentDescription = null,
+                                tint = colors.textMuted,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Searching for nearby devices…",
-                            color = TextPrimary,
+                            text = "No devices nearby yet",
+                            color = colors.textPrimary,
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
+                            fontSize = 15.sp
                         )
                         Text(
-                            text = "Ensure SpeedShare is open on your Windows PC or other phones on the same Wi-Fi.",
-                            color = TextSecondary,
+                            text = "Open SpeedShare on your Windows PC or another phone on the same Wi-Fi.",
+                            color = colors.textSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp)
@@ -642,14 +454,13 @@ fun ShareTabContent(
             }
         }
 
-        // Section 2: Quick Pick Categories
+        // Section 2: Quick-pick categories
         item {
             Text(
-                text = "SELECT FILES TO SHARE",
+                text = "Choose files to share",
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
-                color = TextSecondary,
-                letterSpacing = 0.5.sp
+                fontSize = 13.sp,
+                color = colors.textPrimary
             )
         }
 
@@ -660,7 +471,7 @@ fun ShareTabContent(
             )
         }
 
-        // Section 3: Selected Files Queue
+        // Section 3: Queued files
         if (selectedFiles.isNotEmpty()) {
             item {
                 Row(
@@ -669,17 +480,15 @@ fun ShareTabContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "QUEUED FILES (${selectedFiles.size})",
+                        text = "Queued files (${selectedFiles.size})",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        letterSpacing = 0.5.sp
+                        fontSize = 13.sp,
+                        color = colors.textPrimary
                     )
-
                     TextButton(onClick = onClearFiles) {
                         Text(
-                            text = "Clear All",
-                            color = StatusError,
+                            text = "Clear all",
+                            color = colors.error,
                             fontSize = 12.sp
                         )
                     }
@@ -695,7 +504,7 @@ fun ShareTabContent(
         }
 
         item {
-            Spacer(modifier = Modifier.height(90.dp))
+            Spacer(modifier = Modifier.height(96.dp))
         }
     }
 }
@@ -706,19 +515,21 @@ fun DeviceCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val colors = LocalSpeedShareColors.current
+    val scheme = MaterialTheme.colorScheme
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) PrimaryIndigoContainer else SurfaceSlate900
+            containerColor = if (isSelected) scheme.primaryContainer else scheme.surface
         ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .border(
                 1.5.dp,
-                if (isSelected) PrimaryIndigo else SurfaceSlate700.copy(alpha = 0.5f),
-                RoundedCornerShape(14.dp)
+                if (isSelected) scheme.primary else colors.border,
+                RoundedCornerShape(16.dp)
             )
     ) {
         Row(
@@ -730,16 +541,16 @@ fun DeviceCard(
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
-                        if (isSelected) PrimaryIndigo.copy(alpha = 0.25f) else SurfaceSlate800
+                        if (isSelected) scheme.primary.copy(alpha = 0.18f) else colors.surfaceRaised
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (peer.isWindows) Icons.Default.Laptop else Icons.Default.Smartphone,
                     contentDescription = null,
-                    tint = if (isSelected) PrimaryIndigoLight else TextPrimary,
+                    tint = if (isSelected) scheme.primary else colors.textSecondary,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -749,7 +560,7 @@ fun DeviceCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = peer.deviceName,
-                    color = TextPrimary,
+                    color = colors.textPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
                     maxLines = 1,
@@ -757,23 +568,36 @@ fun DeviceCard(
                 )
                 Text(
                     text = "${peer.ipAddress} • ${peer.displayBadge}",
-                    color = TextSecondary,
+                    color = colors.textSecondary,
                     fontSize = 12.sp
                 )
             }
 
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isSelected) PrimaryIndigo else SurfaceSlate800,
+                shape = RoundedCornerShape(10.dp),
+                color = if (isSelected) scheme.primary else colors.surfaceRaised,
                 modifier = Modifier.padding(start = 6.dp)
             ) {
-                Text(
-                    text = if (isSelected) "SELECTED" else "READY",
-                    color = if (isSelected) TextPureWhite else TextSecondary,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = scheme.onPrimary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = if (isSelected) "Selected" else "Ready",
+                        color = if (isSelected) scheme.onPrimary else colors.textSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -784,12 +608,14 @@ fun FileItemRow(
     file: FileItem,
     onRemove: () -> Unit
 ) {
+    val colors = LocalSpeedShareColors.current
+    val categoryColor = CategoryColors.forCategory(file.fileCategory)
     Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
-        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, SurfaceSlate700.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
     ) {
         Row(
             modifier = Modifier
@@ -799,15 +625,15 @@ fun FileItemRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(PrimaryIndigo.copy(alpha = 0.12f)),
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(categoryColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = getFileCategoryIcon(file.fileCategory),
                     contentDescription = null,
-                    tint = PrimaryIndigoLight,
+                    tint = categoryColor,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -817,7 +643,7 @@ fun FileItemRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.name,
-                    color = TextPrimary,
+                    color = colors.textPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -825,19 +651,19 @@ fun FileItemRow(
                 )
                 Text(
                     text = file.formattedSize,
-                    color = TextSecondary,
+                    color = colors.textSecondary,
                     fontSize = 11.sp
                 )
             }
 
             IconButton(
                 onClick = onRemove,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(30.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Remove",
-                    tint = TextMuted,
+                    tint = colors.textMuted,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -857,6 +683,3 @@ private fun getFileCategoryIcon(category: String): ImageVector {
         else -> Icons.Default.Description
     }
 }
-
-
-

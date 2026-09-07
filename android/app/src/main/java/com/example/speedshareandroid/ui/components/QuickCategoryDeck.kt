@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ fun QuickCategoryDeck(
     onPickCategory: (String) -> Unit,
     onPickFolder: () -> Unit
 ) {
+    val colors = LocalSpeedShareColors.current
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -38,7 +40,7 @@ fun QuickCategoryDeck(
                 title = "Photos",
                 subtitle = "JPG, PNG, RAW",
                 icon = Icons.Default.Image,
-                accentColor = AccentSky,
+                accentColor = CategoryColors.Image,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("image/*") }
             )
@@ -46,13 +48,13 @@ fun QuickCategoryDeck(
                 title = "Videos",
                 subtitle = "MP4, MKV, 4K",
                 icon = Icons.Default.VideoLibrary,
-                accentColor = AccentViolet,
+                accentColor = CategoryColors.Video,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("video/*") }
             )
         }
 
-        // Row 2: Audio & All Files
+        // Row 2: Audio & Folder
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -61,28 +63,28 @@ fun QuickCategoryDeck(
                 title = "Audio",
                 subtitle = "MP3, FLAC, WAV",
                 icon = Icons.Default.Audiotrack,
-                accentColor = AccentMint,
+                accentColor = CategoryColors.Audio,
                 modifier = Modifier.weight(1f),
                 onClick = { onPickCategory("audio/*") }
             )
             CategoryTile(
-                title = "All Files",
-                subtitle = "Docs, ZIP, APK",
-                icon = Icons.Default.Description,
-                accentColor = PrimaryIndigo,
+                title = "Folder",
+                subtitle = "Preserve subfolders",
+                icon = Icons.Default.FolderOpen,
+                accentColor = colors.info,
                 modifier = Modifier.weight(1f),
-                onClick = { onPickCategory("*/*") }
+                onClick = onPickFolder
             )
         }
 
-        // Row 3: Entire Folder
+        // Row 3: All files (full width)
         CategoryTile(
-            title = "Folder / Directory",
-            subtitle = "Preserve subfolders & batch transfer",
-            icon = Icons.Default.FolderOpen,
-            accentColor = AccentAmber,
+            title = "All files",
+            subtitle = "Docs, archives, apps — anything",
+            icon = Icons.Default.Description,
+            accentColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.fillMaxWidth(),
-            onClick = onPickFolder
+            onClick = { onPickCategory("*/*") }
         )
     }
 }
@@ -96,11 +98,12 @@ private fun CategoryTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val colors = LocalSpeedShareColors.current
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(SurfaceSlate900)
-            .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(12.dp)
     ) {
@@ -110,8 +113,8 @@ private fun CategoryTile(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(accentColor.copy(alpha = 0.12f)),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accentColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -127,13 +130,13 @@ private fun CategoryTile(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = TextPrimary,
+                    color = colors.textPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp
                 )
                 Text(
                     text = subtitle,
-                    color = TextSecondary,
+                    color = colors.textSecondary,
                     fontSize = 11.sp,
                     lineHeight = 14.sp
                 )
@@ -141,4 +144,3 @@ private fun CategoryTile(
         }
     }
 }
-

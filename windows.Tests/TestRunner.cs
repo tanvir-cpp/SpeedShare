@@ -65,9 +65,9 @@ namespace SpeedShareWindows.Tests
             Test("DiscoveredPeer.Icon mapping", () =>
             {
                 var a = new DiscoveredPeer { DeviceType = "ANDROID" };
-                if (a.PlatformIcon != "📱") throw new Exception(a.PlatformIcon);
+                if (a.PlatformIcon != "\uE8A9") throw new Exception(a.PlatformIcon);
                 var w = new DiscoveredPeer { DeviceType = "WINDOWS" };
-                if (w.PlatformIcon != "💻") throw new Exception(w.PlatformIcon);
+                if (w.PlatformIcon != "\uE7F8") throw new Exception(w.PlatformIcon);
             });
 
             Test("FileCategory extension classification", () =>
@@ -96,6 +96,16 @@ namespace SpeedShareWindows.Tests
                 {
                     try { Directory.Delete(tmp, true); } catch { }
                 }
+            });
+
+            Test("AppTheme persistence round-trip", () =>
+            {
+                if (!Enum.TryParse<AppTheme>("Dark", ignoreCase: true, out var dark) || dark != AppTheme.Dark)
+                    throw new Exception("parse failed");
+                if (!Enum.TryParse<AppTheme>("light", ignoreCase: true, out var light) || light != AppTheme.Light)
+                    throw new Exception("parse failed");
+                if (Enum.TryParse<AppTheme>("nonsense", ignoreCase: true, out _))
+                    throw new Exception("nonsense should not parse");
             });
 
             Test("TransferProgressReport formatting", () =>

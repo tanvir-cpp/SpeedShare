@@ -20,6 +20,7 @@ import com.example.speedshareandroid.network.TransferServer
 import com.example.speedshareandroid.network.UpdateChecker
 import com.example.speedshareandroid.network.UpdateError
 import com.example.speedshareandroid.network.UpdateInfo
+import com.example.speedshareandroid.theme.ThemeMode
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -63,6 +64,11 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
     private val _isTransferring = MutableStateFlow(false)
     val isTransferring: StateFlow<Boolean> = _isTransferring.asStateFlow()
 
+    // True while the active transfer is an incoming (receive) session — used by
+    // the result UI to offer "Open folder" and to phrase completion copy.
+    private val _isReceiving = MutableStateFlow(false)
+    val isReceiving: StateFlow<Boolean> = _isReceiving.asStateFlow()
+
     private val _transferStatusDialog = MutableStateFlow<Pair<Boolean, String?>?>(null)
     val transferStatusDialog: StateFlow<Pair<Boolean, String?>?> = _transferStatusDialog.asStateFlow()
 
@@ -102,6 +108,17 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
         prefs.getString("device_name", "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}") ?: "Android Device"
     )
     val customDeviceName: StateFlow<String> = _customDeviceName.asStateFlow()
+
+    // Appearance state — light/dark/system ("theme_mode" persisted)
+    private val _themeMode = MutableStateFlow(
+        ThemeMode.valueOf(prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name)
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString("theme_mode", mode.name).apply()
+    }
 
     init {
         discoveryManager = DiscoveryManager(context).apply {
@@ -272,6 +289,7 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
         val files = _selectedFiles.value
         if (files.isEmpty() || _isTransferring.value) return
 
+        _isReceiving.value = false
         _isTransferring.value = true
         viewModelScope.launch {
             transferClient.sendFiles(peer, discoveryManager.deviceName, files)
@@ -281,6 +299,7 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
     fun acceptIncoming() {
         val req = _incomingRequest.value ?: return
         _incomingRequest.value = null
+        _isReceiving.value = true
         _isTransferring.value = true
         transferServer.acceptTransfer(req.sessionId)
     }
@@ -299,6 +318,7 @@ class SpeedShareViewModel(application: Application) : AndroidViewModel(applicati
         transferClient.cancel()
         transferServer.cancelTransfer(_incomingRequest.value?.sessionId)
         _isTransferring.value = false
+        _isReceiving.value = false
         _transferStatusDialog.value = Pair(false, "Transfer cancelled.")
     }
 

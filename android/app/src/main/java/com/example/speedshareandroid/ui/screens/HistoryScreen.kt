@@ -23,15 +23,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.speedshareandroid.models.HistoryFilter
+import com.example.speedshareandroid.models.TransferRecord
 import com.example.speedshareandroid.theme.*
 import com.example.speedshareandroid.ui.SpeedShareViewModel
 import com.example.speedshareandroid.ui.components.HistoryItemCard
+import java.util.Calendar
 
 @Composable
 fun HistoryScreen(
     viewModel: SpeedShareViewModel
 ) {
     val context = LocalContext.current
+    val colors = LocalSpeedShareColors.current
     val historyRecords by viewModel.filteredHistoryRecords.collectAsState()
     val allRecords by viewModel.allHistoryRecords.collectAsState()
     val searchQuery by viewModel.historySearchQuery.collectAsState()
@@ -42,21 +45,21 @@ fun HistoryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceSlate950)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 16.dp)
     ) {
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Search Input Bar
+        // Search bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.setHistorySearchQuery(it) },
-            placeholder = { Text("Search transfers…", color = TextSecondary, fontSize = 13.sp) },
+            placeholder = { Text("Search transfers…", color = colors.textSecondary, fontSize = 13.sp) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = TextSecondary,
+                    tint = colors.textSecondary,
                     modifier = Modifier.size(18.dp)
                 )
             },
@@ -66,7 +69,7 @@ fun HistoryScreen(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Clear search",
-                            tint = TextSecondary,
+                            tint = colors.textSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -75,28 +78,28 @@ fun HistoryScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = SurfaceSlate900,
-                unfocusedContainerColor = SurfaceSlate900,
-                focusedBorderColor = PrimaryIndigo,
-                unfocusedBorderColor = SurfaceSlate700.copy(alpha = 0.6f),
-                focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = colors.border,
+                focusedTextColor = colors.textPrimary,
+                unfocusedTextColor = colors.textPrimary
             ),
             singleLine = true
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Filter Pills Row & Clear Button
+        // Filter chips + clear
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 val filters = listOf(
@@ -105,7 +108,6 @@ fun HistoryScreen(
                     Pair(HistoryFilter.SENT, "Sent"),
                     Pair(HistoryFilter.FAILED, "Failed")
                 )
-
                 items(filters) { (filter, label) ->
                     val isSelected = currentFilter == filter
                     FilterChip(
@@ -119,18 +121,18 @@ fun HistoryScreen(
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            containerColor = SurfaceSlate900,
-                            selectedContainerColor = PrimaryIndigoContainer,
-                            labelColor = TextSecondary,
-                            selectedLabelColor = PrimaryIndigoLight
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = colors.textSecondary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
                             selected = isSelected,
-                            borderColor = SurfaceSlate700.copy(alpha = 0.5f),
-                            selectedBorderColor = PrimaryIndigo
+                            borderColor = colors.border,
+                            selectedBorderColor = MaterialTheme.colorScheme.primary
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             }
@@ -143,7 +145,7 @@ fun HistoryScreen(
                     Icon(
                         imageVector = Icons.Default.DeleteOutline,
                         contentDescription = "Clear All History",
-                        tint = StatusError,
+                        tint = colors.error,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -152,7 +154,7 @@ fun HistoryScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Content List
+        // Content: grouped by day
         if (historyRecords.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -168,72 +170,84 @@ fun HistoryScreen(
                         modifier = Modifier
                             .size(56.dp)
                             .clip(CircleShape)
-                            .background(SurfaceSlate900)
-                            .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), CircleShape),
+                            .background(colors.surface)
+                            .border(1.dp, colors.border, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.History,
                             contentDescription = null,
-                            tint = TextMuted,
+                            tint = colors.textMuted,
                             modifier = Modifier.size(26.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = if (searchQuery.isNotEmpty()) "No matching transfers" else "No Transfer History",
-                        color = TextPrimary,
+                        text = if (searchQuery.isNotEmpty()) "No matching transfers" else "No transfers yet",
+                        color = colors.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (searchQuery.isNotEmpty()) "Try a different keyword or change the category filter." else "Sent and received files will appear here with quick open & share actions.",
-                        color = TextSecondary,
+                        text = if (searchQuery.isNotEmpty())
+                            "Try a different keyword or change the filter."
+                        else
+                            "Sent and received files will appear here with quick open and share actions.",
+                        color = colors.textSecondary,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center
                     )
                 }
             }
         } else {
+            val grouped = groupRecordsByDay(historyRecords)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 100.dp)
             ) {
-                items(
-                    items = historyRecords,
-                    key = { it.id }
-                ) { record ->
-                    HistoryItemCard(
-                        record = record,
-                        onOpen = { viewModel.openFile(context, record) },
-                        onShare = { viewModel.shareFile(context, record) },
-                        onDelete = { viewModel.deleteHistoryRecord(record.id) }
-                    )
+                grouped.forEach { (dayLabel, records) ->
+                    item(key = "day_$dayLabel") {
+                        Text(
+                            text = dayLabel,
+                            color = colors.textMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+                        )
+                    }
+                    items(items = records, key = { it.id }) { record ->
+                        HistoryItemCard(
+                            record = record,
+                            onOpen = { viewModel.openFile(context, record) },
+                            onShare = { viewModel.shareFile(context, record) },
+                            onDelete = { viewModel.deleteHistoryRecord(record.id) }
+                        )
+                    }
                 }
             }
         }
     }
 
-    // Clear Confirmation Dialog
+    // Clear confirmation
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            containerColor = SurfaceSlate900,
-            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
-                    text = "Clear Transfer History?",
-                    color = TextPrimary,
+                    text = "Clear transfer history?",
+                    color = colors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
             },
             text = {
                 Text(
-                    text = "This will remove all transfer history records. Received files on disk remain safe in Downloads/SpeedShare.",
-                    color = TextSecondary,
+                    text = "This removes all history records. Files you've received stay safe in Downloads/SpeedShare.",
+                    color = colors.textSecondary,
                     fontSize = 13.sp
                 )
             },
@@ -243,18 +257,43 @@ fun HistoryScreen(
                         viewModel.clearAllHistory()
                         showClearDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = StatusError),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.error),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Clear All", color = TextPureWhite, fontWeight = FontWeight.Bold)
+                    Text("Clear all", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = colors.textSecondary)
                 }
             }
         )
     }
 }
 
+/** Group records into "Today", "Yesterday", and absolute-date buckets (newest first). */
+private fun groupRecordsByDay(records: List<TransferRecord>): List<Pair<String, List<TransferRecord>>> {
+    if (records.isEmpty()) return emptyList()
+
+    fun labelFor(timestamp: Long): String {
+        val now = Calendar.getInstance()
+        val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val sameDayAs = { other: Calendar ->
+            cal.get(Calendar.YEAR) == other.get(Calendar.YEAR) &&
+                cal.get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
+        }
+        return when {
+            sameDayAs(now) -> "Today"
+            sameDayAs(yesterday) -> "Yesterday"
+            else -> java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault()).format(cal.time)
+        }
+    }
+
+    return records
+        .groupBy { labelFor(it.timestamp) }
+        .entries
+        .sortedByDescending { (_, list) -> list.maxOf { it.timestamp } } // buckets newest-first
+        .map { (label, list) -> label to list.sortedByDescending { it.timestamp } }
+}

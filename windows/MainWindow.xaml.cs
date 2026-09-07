@@ -78,8 +78,8 @@ namespace SpeedShareWindows
             TxtSettingsUpdateTitle.Text = $"SpeedShare {versionTag}";
             TxtUpdateCurrentVersion.Text = $" • Current: {versionTag}";
 
-            // Load persisted settings (device name, download folder)
-            var (savedName, savedFolder) = SettingsService.Load();
+            // Load persisted settings (device name, download folder, theme)
+            var (savedName, savedFolder, savedTheme) = SettingsService.Load();
             if (!string.IsNullOrWhiteSpace(savedName))
             {
                 _discoveryService.DeviceName = savedName;
@@ -91,6 +91,12 @@ namespace SpeedShareWindows
                 _transferServer.DownloadFolder = savedFolder;
                 TxtDownloadFolder.Text = savedFolder;
             }
+
+            // Reflect the startup theme in the toggle + settings radios
+            ThemeService.Apply(savedTheme);
+            SyncThemeRadios();
+            UpdateThemeToggleIcon();
+            ShowHomePage();
 
             _transferServer.Start();
             _discoveryService.Start();
@@ -240,7 +246,7 @@ namespace SpeedShareWindows
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 e.Effects = DragDropEffects.Copy;
-                DropZone.BorderBrush = (Brush)FindResource("AccentCyan");
+                DropZone.BorderBrush = (Brush)FindResource("InfoBrush");
             }
             else
             {
@@ -251,12 +257,12 @@ namespace SpeedShareWindows
 
         private void DropZone_DragLeave(object sender, DragEventArgs e)
         {
-            DropZone.BorderBrush = (Brush)FindResource("BorderDark");
+            DropZone.BorderBrush = (Brush)FindResource("BorderBrush");
         }
 
         private void DropZone_Drop(object sender, DragEventArgs e)
         {
-            DropZone.BorderBrush = (Brush)FindResource("BorderDark");
+            DropZone.BorderBrush = (Brush)FindResource("BorderBrush");
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
@@ -444,7 +450,7 @@ namespace SpeedShareWindows
                     var tb = new TextBlock
                     {
                         Text = $"• {f.Name} ({FileMetadata.FormatBytes(f.Size)})",
-                        Foreground = (Brush)FindResource("TextPrimary"),
+                        Foreground = (Brush)FindResource("TextPrimaryBrush"),
                         FontSize = 12,
                         Margin = new Thickness(0, 2, 0, 2),
                         TextTrimming = TextTrimming.CharacterEllipsis
@@ -598,12 +604,89 @@ namespace SpeedShareWindows
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
-            SettingsModal.Visibility = Visibility.Visible;
+            ShowSettingsPage();
+        }
+
+        private void NavHome_Click(object sender, RoutedEventArgs e)
+        {
+            ShowHomePage();
+        }
+
+        private void NavSettings_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSettingsPage();
+        }
+
+        private void ShowHomePage()
+        {
+            HomePage.Visibility = Visibility.Visible;
+            SettingsPage.Visibility = Visibility.Collapsed;
+            NavHomeIcon.Foreground = (Brush)FindResource("BrandBrush");
+            NavHomeIcon.FontWeight = FontWeights.Bold;
+            NavSettingsIcon.Foreground = (Brush)FindResource("TextSecondaryBrush");
+            NavSettingsIcon.FontWeight = FontWeights.Normal;
+        }
+
+        private void ShowSettingsPage()
+        {
+            HomePage.Visibility = Visibility.Collapsed;
+            SettingsPage.Visibility = Visibility.Visible;
+            NavSettingsIcon.Foreground = (Brush)FindResource("BrandBrush");
+            NavSettingsIcon.FontWeight = FontWeights.Bold;
+            NavHomeIcon.Foreground = (Brush)FindResource("TextSecondaryBrush");
+            NavHomeIcon.FontWeight = FontWeights.Normal;
+
+            // Refresh the settings controls each time the page opens
+            TxtCustomDeviceName.Text = _discoveryService.DeviceName;
+            TxtDownloadFolder.Text = _transferServer.DownloadFolder;
+            SyncThemeRadios();
+        }
+
+        private void BtnThemeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            // Cycle System -> Light -> Dark -> System
+            var next = ThemeService.Current switch
+            {
+                AppTheme.System => AppTheme.Light,
+                AppTheme.Light => AppTheme.Dark,
+                _ => AppTheme.System
+            };
+            ApplyTheme(next);
+        }
+
+        private void ThemeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (RadioThemeSystem.IsChecked == true) ApplyTheme(AppTheme.System);
+            else if (RadioThemeLight.IsChecked == true) ApplyTheme(AppTheme.Light);
+            else if (RadioThemeDark.IsChecked == true) ApplyTheme(AppTheme.Dark);
+        }
+
+        private void ApplyTheme(AppTheme mode)
+        {
+            ThemeService.Apply(mode);
+            SettingsService.Save(null, null, mode);
+            SyncThemeRadios();
+            UpdateThemeToggleIcon();
+        }
+
+        private void SyncThemeRadios()
+        {
+            var mode = ThemeService.Current;
+            RadioThemeSystem.IsChecked = mode == AppTheme.System;
+            RadioThemeLight.IsChecked = mode == AppTheme.Light;
+            RadioThemeDark.IsChecked = mode == AppTheme.Dark;
+        }
+
+        private void UpdateThemeToggleIcon()
+        {
+            // Sun / moon glyph depending on the resolved theme
+            ThemeToggleIcon.Text = ThemeService.IsDark ? "\uE708" : "\uE706";
         }
 
         private void BtnCloseSettings_Click(object sender, RoutedEventArgs e)
         {
-            SettingsModal.Visibility = Visibility.Collapsed;
+            ShowHomePage();
         }
 
         private void BtnBrowseFolder_Click(object sender, RoutedEventArgs e)
@@ -638,7 +721,6 @@ namespace SpeedShareWindows
             }
 
             SettingsService.Save(newName, newFolder);
-            SettingsModal.Visibility = Visibility.Collapsed;
             _ = _discoveryService.BroadcastBeaconAsync();
         }
 
@@ -646,7 +728,7 @@ namespace SpeedShareWindows
         {
             BtnCheckUpdateManual.IsEnabled = false;
             TxtSettingsUpdateStatus.Text = "Checking GitHub Releases…";
-            TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonCyan");
+            TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("InfoBrush");
 
             var outcome = await UpdateCheckerService.CheckForUpdatesAsync();
             _lastUpdateCheckUtc = DateTime.UtcNow;
@@ -657,17 +739,17 @@ namespace SpeedShareWindows
                 {
                     case UpdateCheckResult.UpdateAvailable:
                         TxtSettingsUpdateStatus.Text = $"Update {outcome.Update!.VersionTag} is available!";
-                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
+                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("SuccessBrush");
                         ShowUpdateModal(outcome.Update);
                         break;
                     case UpdateCheckResult.NoUpdate:
                         TxtSettingsUpdateStatus.Text = $"SpeedShare v{UpdateCheckerService.CurrentVersion} is up to date!";
-                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonMint");
+                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("SuccessBrush");
                         break;
                     case UpdateCheckResult.Failed:
                     default:
                         TxtSettingsUpdateStatus.Text = $"Check failed: {outcome.Error ?? "unknown error"}";
-                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("NeonRose");
+                        TxtSettingsUpdateStatus.Foreground = (Brush)FindResource("ErrorBrush");
                         break;
                 }
             }

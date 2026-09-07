@@ -61,16 +61,32 @@ Write-Host "`n[4/5] Computing SHA-256 sidecars..." -ForegroundColor Yellow
 # 6. Git commit & push and GitHub Release
 Write-Host "`n[5/5] Creating Git commit, tag, and GitHub Release..." -ForegroundColor Yellow
 
-$ReleaseTitle = "SpeedShare $Tag - Modern UI/UX Overhaul & Dynamic Experience"
+$ReleaseTitle = "SpeedShare $Tag — Complete UI/UX Redesign for Windows & Android"
 $ReleaseNotes = @"
-## 🚀 SpeedShare $Tag Release Notes
+## 🚀 SpeedShare $Tag
 
-### 🎨 Mobile App UI/UX & Visual Modernization
-- **Modern Jetpack Compose Design System**: Curated vibrant cyber-blue and ultraviolet palettes with refined dark/light mode surface elevations.
-- **Dynamic Radar Hero & Scanning State**: High-polish animated sonar rings, pulsing emitter rings, and responsive peer nodes.
-- **Interactive Quick Category Deck**: Fluid category selection cards (Files, Photos, Videos, Audio, Apps, Folders) with smooth micro-interactions.
-- **Glassmorphic Transfer Cards**: Live progress metrics, speed tracking, transfer states, and smooth haptic/visual feedback.
-- **Enhanced Settings & History Experience**: Refined category-filtered history search, grouped settings tiles, and animated update dialogues.
+A ground-up redesign of both apps around a single new identity — **"Prism"**:
+adaptive light & dark themes, an electric **blue → cyan** brand system, and
+native-feeling components on each platform. This is the biggest visual and
+interaction update since 1.0.
+
+### 🎨 Android (Jetpack Compose · Material 3)
+- **Adaptive light / dark / system themes** with a new semantic token system — switch live from Settings.
+- **Rebuilt onboarding** around the three promises: *Private by design · Direct & instant · Full line-rate speed*.
+- **Redesigned Home & radar hero** with an adaptive peer-status pill and brand-gradient action bar.
+- **New bottom-sheet flows** for incoming transfers and live progress, with inline success / failure results.
+- **Day-grouped History** (Today / Yesterday / date) with restyled search and filter chips.
+- **Rebuilt Settings** with an Appearance section, and refreshed update/network/about groups.
+
+### 🖥️ Windows (WPF)
+- **Live light & dark themes** — follow the system or toggle from the header / Settings; persisted per user.
+- **New navigation**: Home / Settings rail with a proper Devices panel and drop-zone send deck.
+- **Segoe Fluent icons** replace emoji throughout; every card, dialog, and overlay restyled to the brand.
+- **Installer restyled** to match, following the OS theme.
+
+### 🧩 Shared
+- New **launcher icon** across Windows and Android: a blue→cyan gradient tile with a share glyph.
+- Version bumped to **2.0.0** with matching Win32 manifests.
 
 ---
 
@@ -84,14 +100,14 @@ Every release asset includes a cryptographic SHA-256 sidecar file for in-app int
 | ``SpeedShare-Windows-Portable.exe`` | Standalone portable Windows executable |
 
 ---
-**Full Changelog**: https://github.com/tanvir-cpp/SpeedShare/compare/v1.1.2...$Tag
+**Full Changelog**: https://github.com/tanvir-cpp/SpeedShare/compare/v1.2.1...$Tag
 "@
 
 if (-not $SkipGitPush) {
     # Stage release source and metadata without including signing keys or
     # backup files that may be present in the Android keystore directory.
     git add Install-SpeedShare.ps1 Uninstall-SpeedShare.ps1 README.md VERSION protocol scripts android/app windows windows-installer windows.Tests
-    git commit -m "release: SpeedShare $Tag - Modern UI/UX Overhaul & Experience Modernization"
+    git commit -m "release: SpeedShare $Tag - complete UI/UX redesign (Prism)"
     git push origin main
     
     $distFiles = Get-ChildItem "$DistDir\*" | ForEach-Object { $_.FullName }

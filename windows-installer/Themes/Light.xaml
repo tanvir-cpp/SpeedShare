@@ -1,0 +1,31 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ============ SpeedShare 2.0 "Prism" — Light (installer) ============ -->
+    <SolidColorBrush x:Key="CanvasBrush" Color="#F5F7FB"/>
+    <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="CardHoverBrush" Color="#EFF3FA"/>
+    <SolidColorBrush x:Key="RaisedBrush" Color="#EFF3FA"/>
+    <SolidColorBrush x:Key="FieldBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#D8E0EE"/>
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#B9C6DC"/>
+
+    <SolidColorBrush x:Key="BrandBrush" Color="#2563EB"/>
+    <SolidColorBrush x:Key="OnBrandBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="BrandSoftBrush" Color="#DCE8FE"/>
+    <SolidColorBrush x:Key="OnBrandSoftBrush" Color="#1D4ED8"/>
+    <LinearGradientBrush x:Key="BrandGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#2563EB" Offset="0"/>
+        <GradientStop Color="#06B6D4" Offset="1"/>
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#0F172A"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#475569"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B"/>
+
+    <SolidColorBrush x:Key="SuccessBrush" Color="#10B981"/>
+    <SolidColorBrush x:Key="SuccessSoftBrush" Color="#D1FAE5"/>
+    <SolidColorBrush x:Key="OnSuccessSoftBrush" Color="#047857"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="#F43F5E"/>
+    <SolidColorBrush x:Key="InfoBrush" Color="#06B6D4"/>
+</ResourceDictionary>

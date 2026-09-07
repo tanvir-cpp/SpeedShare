@@ -21,10 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.speedshareandroid.models.FileItem
 import com.example.speedshareandroid.network.UpdateInfo
 import com.example.speedshareandroid.theme.*
-
-private fun formatSize(bytes: Long): String = com.example.speedshareandroid.models.FileItem.formatBytes(bytes)
 
 @Composable
 fun UpdateDialog(
@@ -35,16 +34,18 @@ fun UpdateDialog(
     onUpdateNow: () -> Unit
 ) {
     val context = LocalContext.current
+    val colors = LocalSpeedShareColors.current
+    val scheme = MaterialTheme.colorScheme
 
     Dialog(onDismissRequest = {
         if (downloadProgress == null) onDismiss()
     }) {
         Card(
-            colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
-            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = scheme.surface),
+            shape = RoundedCornerShape(24.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, SurfaceSlate700.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                .border(1.dp, colors.border, RoundedCornerShape(24.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -58,67 +59,70 @@ fun UpdateDialog(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryIndigo.copy(alpha = 0.15f)),
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(scheme.primary, colors.info)
+                                )
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.SystemUpdate,
                             contentDescription = null,
-                            tint = PrimaryIndigoLight,
+                            tint = scheme.onPrimary,
                             modifier = Modifier.size(22.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "New Update Available",
-                            color = TextPrimary,
+                            text = "New update available",
+                            color = colors.textPrimary,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = 17.sp
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = updateInfo.versionTag,
-                                color = AccentMint,
+                                color = colors.success,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
                             Text(
-                                text = " • Current: v$currentVersion",
-                                color = TextSecondary,
+                                text = "  •  Current: v$currentVersion",
+                                color = colors.textSecondary,
                                 fontSize = 12.sp
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "RELEASE NOTES",
-                    color = TextMuted,
+                    text = "Release notes",
+                    color = colors.textMuted,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.5.sp
+                    fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Scrollable Changelog box
+                // Scrollable changelog
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 60.dp, max = 150.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(SurfaceSlate950)
-                        .border(1.dp, SurfaceSlate800, RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surfaceRaised)
+                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
                     val scrollState = rememberScrollState()
                     Text(
                         text = updateInfo.changelog,
-                        color = TextSecondary,
+                        color = colors.textSecondary,
                         fontSize = 12.sp,
                         lineHeight = 18.sp,
                         modifier = Modifier.verticalScroll(scrollState)
@@ -127,7 +131,7 @@ fun UpdateDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Download Progress
+                // Download progress
                 if (downloadProgress != null) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
@@ -135,14 +139,14 @@ fun UpdateDialog(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Downloading APK…",
-                                color = PrimaryIndigoLight,
+                                text = "Downloading update…",
+                                color = scheme.primary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 text = "${(downloadProgress * 100).toInt()}%",
-                                color = TextPrimary,
+                                color = colors.textPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -154,24 +158,24 @@ fun UpdateDialog(
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp)),
-                            color = PrimaryIndigo,
-                            trackColor = SurfaceSlate950
+                            color = scheme.primary,
+                            trackColor = colors.surfaceRaised
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                 } else {
-                    // Metadata row
+                    // Metadata + actions
                     if (updateInfo.sha256 != null || updateInfo.apkSize > 0) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 12.dp),
+                                .padding(bottom = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             if (updateInfo.apkSize > 0) {
                                 Text(
-                                    text = "Size: ${formatSize(updateInfo.apkSize)}",
-                                    color = TextSecondary,
+                                    text = "Size: ${FileItem.formatBytes(updateInfo.apkSize)}",
+                                    color = colors.textSecondary,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -181,7 +185,7 @@ fun UpdateDialog(
                             if (updateInfo.sha256 != null) {
                                 Text(
                                     text = "✓ SHA-256 verified",
-                                    color = StatusSuccess,
+                                    color = colors.success,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -189,7 +193,6 @@ fun UpdateDialog(
                         }
                     }
 
-                    // Action Buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -197,12 +200,13 @@ fun UpdateDialog(
                         OutlinedButton(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextSecondary
+                                contentColor = colors.textSecondary
                             ),
-                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(SurfaceSlate700)
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                colors.borderStrong
                             )
                         ) {
                             Text(text = "Later", fontSize = 12.sp)
@@ -216,12 +220,13 @@ fun UpdateDialog(
                                 context.startActivity(intent)
                             },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextPrimary
+                                contentColor = colors.textPrimary
                             ),
-                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(SurfaceSlate700)
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                colors.borderStrong
                             )
                         ) {
                             Text(text = "GitHub", fontSize = 12.sp)
@@ -229,11 +234,16 @@ fun UpdateDialog(
 
                         Button(
                             onClick = onUpdateNow,
-                            modifier = Modifier.weight(1.3f),
-                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .background(
+                                    brush = colors.brandGradients.primary,
+                                    shape = RoundedCornerShape(12.dp)
+                                ),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = PrimaryIndigo,
-                                contentColor = TextPureWhite
+                                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                contentColor = scheme.onPrimary
                             )
                         ) {
                             Text(text = "Update", fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -244,4 +254,3 @@ fun UpdateDialog(
         }
     }
 }
-

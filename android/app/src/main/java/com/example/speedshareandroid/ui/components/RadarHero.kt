@@ -31,8 +31,10 @@ fun RadarHero(
     deviceCount: Int,
     onRefresh: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "radar_waves")
+    val colors = LocalSpeedShareColors.current
+    val scheme = MaterialTheme.colorScheme
 
+    val infiniteTransition = rememberInfiniteTransition(label = "radar_waves")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.85f,
         targetValue = 1.25f,
@@ -43,7 +45,7 @@ fun RadarHero(
         label = "pulse_scale"
     )
     val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
+        initialValue = 0.45f,
         targetValue = 0.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(2200, easing = FastOutSlowInEasing),
@@ -61,30 +63,28 @@ fun RadarHero(
     )
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceSlate900),
+        colors = CardDefaults.cardColors(containerColor = scheme.surface),
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, SurfaceSlate700.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(CardSurfaceGradient)
+                .background(colors.brandGradients.cardSurface)
                 .padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Bar: Status Badge + Refresh Action
+            // Header row: status pill + refresh
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Status Pill
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = if (deviceCount > 0) StatusSuccess.copy(alpha = 0.12f) else PrimaryIndigo.copy(alpha = 0.12f),
-                    border = null,
+                    color = if (deviceCount > 0) colors.successContainer else scheme.secondaryContainer,
                     modifier = Modifier.height(28.dp)
                 ) {
                     Row(
@@ -95,19 +95,18 @@ fun RadarHero(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(if (deviceCount > 0) StatusSuccess else PrimaryIndigoLight)
+                                .background(if (deviceCount > 0) colors.success else scheme.primary)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (deviceCount > 0) "$deviceCount ${if (deviceCount == 1) "peer online" else "peers online"}" else "Scanning network…",
-                            color = if (deviceCount > 0) StatusSuccess else PrimaryIndigoLight,
+                            color = if (deviceCount > 0) colors.onSuccessContainer else scheme.onSecondaryContainer,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                // Refresh Button
                 IconButton(
                     onClick = {
                         isRefreshing = true
@@ -116,12 +115,13 @@ fun RadarHero(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(SurfaceSlate800)
+                        .background(colors.surfaceRaised)
+                        .border(1.dp, colors.border, CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Scan LAN",
-                        tint = TextSecondary,
+                        tint = colors.textSecondary,
                         modifier = Modifier
                             .size(16.dp)
                             .rotate(rotationAngle)
@@ -131,52 +131,41 @@ fun RadarHero(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Compact Radar Center
+            // Radar emblem — blue→cyan hub, gradient ring, pulse
             Box(
                 modifier = Modifier.size(96.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Ambient Background Glow
                 Box(
                     modifier = Modifier
                         .size(90.dp)
                         .clip(CircleShape)
-                        .background(HeroRadarGradient)
+                        .background(colors.brandGradients.heroRadial)
                 )
-
-                // Pulse Wave Ring
                 Box(
                     modifier = Modifier
                         .size((80 * pulseScale).dp)
                         .clip(CircleShape)
-                        .border(1.5.dp, PrimaryIndigo.copy(alpha = pulseAlpha), CircleShape)
+                        .border(1.5.dp, scheme.primary.copy(alpha = pulseAlpha), CircleShape)
                 )
-
-                // Static Outer Concentric Ring
                 Box(
                     modifier = Modifier
                         .size(76.dp)
                         .clip(CircleShape)
-                        .border(1.dp, SurfaceSlate700.copy(alpha = 0.4f), CircleShape)
+                        .border(1.dp, colors.borderStrong.copy(alpha = 0.7f), CircleShape)
                 )
-
-                // Center Hub Icon
                 Box(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(PrimaryIndigoDark, PrimaryIndigo)
-                            )
-                        )
-                        .border(1.5.dp, PrimaryIndigoLight.copy(alpha = 0.6f), CircleShape),
+                        .background(colors.brandGradients.primary)
+                        .border(1.5.dp, scheme.primary.copy(alpha = 0.5f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Wifi,
                         contentDescription = null,
-                        tint = TextPureWhite,
+                        tint = scheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -184,10 +173,9 @@ fun RadarHero(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Device Info
             Text(
                 text = localDeviceName,
-                color = TextPrimary,
+                color = colors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 maxLines = 1,
@@ -198,11 +186,9 @@ fun RadarHero(
 
             Text(
                 text = "Local IP: $localIp",
-                color = TextSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Normal
+                color = colors.textSecondary,
+                fontSize = 12.sp
             )
         }
     }
 }
-
